@@ -9,28 +9,30 @@ from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """你是瑀墨塗料的 LINE 助理。根據用戶的訊息，判斷他想查什麼。
+SYSTEM_PROMPT_TEMPLATE = """你是瑀墨塗料的 LINE 助理。根據用戶的訊息，判斷他想查什麼。
 只回傳 JSON，不要回傳其他內容。
 可用的意圖：
 
-{"intent": "low_stock"} — 查低庫存
-{"intent": "search_product", "keyword": "..."} — 查某商品庫存
-{"intent": "transactions", "days": 7} — 查進出貨紀錄（預設7天）
-{"intent": "orders"} — 查訂單摘要
-{"intent": "pnl", "month": "YYYY-MM"} — 查月收支（沒指定就用當月）
-{"intent": "expense_category", "month": "YYYY-MM"} — 支出分類
-{"intent": "expense_detail"} — 支���明細
-{"intent": "dashboard"} — 帳款狀態總覽
-{"intent": "unknown"} — 無法判斷
+low_stock — 查低庫存
+search_product — 查某商品庫存，需附 keyword
+transactions — 查進出貨紀錄，可附 days（預設7）
+orders — 查訂單摘要
+pnl — 查月收支，需附 month（YYYY-MM 格式）
+expense_category — 支出分類，需附 month
+expense_detail — 支出明細
+dashboard — 帳款狀態總覽
+unknown — 無法判斷
 
 今天是 {today}。
 
 範例：
-「這個月花了多少」→ {{"intent": "pnl", "month": "{current_month}"}}
-「紅色底漆還有嗎」→ {{"intent": "search_product", "keyword": "���色底漆"}}
-「上週出了什麼貨」→ {{"intent": "transactions", "days": 7}}
-「缺什麼貨」→ {{"intent": "low_stock"}}
-「3月支出分類」→ {{"intent": "expense_category", "month": "{current_year}-03"}}"""
+「這個月花了多少」→ intent=pnl, month={current_month}
+「紅色底漆還有嗎」→ intent=search_product, keyword=紅色底漆
+「上週出了什麼貨」→ intent=transactions, days=7
+「缺什麼貨」→ intent=low_stock
+「3月支出分類」→ intent=expense_category, month={current_year}-03
+
+回傳格式範例：{{"intent": "search_product", "keyword": "虹牌"}}"""
 
 
 async def parse_intent(text: str) -> dict:
@@ -47,7 +49,7 @@ async def _claude_parse(text: str) -> dict:
         raise ValueError("ANTHROPIC_API_KEY 未設定")
 
     now = datetime.now()
-    prompt = SYSTEM_PROMPT.format(
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(
         today=now.strftime("%Y-%m-%d"),
         current_month=now.strftime("%Y-%m"),
         current_year=now.year,
@@ -58,12 +60,17 @@ async def _claude_parse(text: str) -> dict:
         model="claude-haiku-4-5-20251001",
         max_tokens=256,
         system=prompt,
-        messages=[{"role": "user", "content": text}],
+        messages=[
+            {"role": "user", "content": text},
+            {"role": "assistant", "content": "{"},
+        ],
     )
-    content = message.content[0].text.strip()
-    # 嘗試從回應中提取 JSON
+    content = "{" + message.content[0].text.strip()
+    # 清除 markdown code block 殘留
+    content = content.replace("```json", "").replace("```", "").strip()
+    # 提取第一個完整 JSON 物件
     if not content.startswith("{"):
-        match = re.search(r"\{.*\}", content, re.DOTALL)
+        match = re.search(r"\{[^{}]*\}", content)
         if match:
             content = match.group()
     return json.loads(content)
