@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+line-bot-sdk>=3.0.0
+anthropic
+httpx
+python-dotenv
+apscheduler>=3.10.0

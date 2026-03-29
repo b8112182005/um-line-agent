@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+*.db
+schema_report.json
+.venv/
+venv/
