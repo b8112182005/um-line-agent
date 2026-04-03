@@ -15,19 +15,32 @@
 - LINE Channel: 瑀墨助理（UMIM Provider）
 - Webhook: https://um-line-agent-production.up.railway.app/callback
 
+## 身份分流
+- 白名單（BOSS_USER_IDS）→ 老闆模式：意圖解析 → 查 WMS/UMmoney → 口語化回覆
+- 非白名單 → 客服模式：AI 客服「小墨」+ 圖文選單固定回覆
+
 ## 環境變數
 LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID,
+BOSS_USER_IDS（逗號分隔白名單）,
 WMS_API_URL, MONEY_API_URL, API_USERNAME, API_PASSWORD, ANTHROPIC_API_KEY
 
-## 支援查詢
+## 支援查詢（老闆模式）
 查庫存、低庫存警報、進出貨紀錄、訂單摘要、月收支、支出分類、支出明細、帳款狀態
+
+## 客服模式觸發文字
+產品介紹、我要備料、工程服務、常見問題、聯絡方式、服務流程 → 固定回覆
+其他文字 → Claude AI 自由對話
 
 ## 定時推播
 - 每日 08:00 低庫存警報
 - 每週一 08:30 月收支摘要
 
+## Rich Menu
+- rich_menu.py — 一次性腳本，建立客服圖文選單（需 Pillow）
+- 執行：python rich_menu.py
+
 ## 分支策略
-master = 正式（Railway 自動部署）
+staging = 開發測試，master = 正式（Railway 自動部署）
 
 ## 開發規範
 - 敏感資訊一律用環境變數，不寫死在程式碼

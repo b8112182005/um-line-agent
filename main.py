@@ -7,9 +7,10 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, BOSS_USER_IDS
 from intent import parse_intent
 from chat import humanize
+from customer import handle_customer
 from query_wms import get_stock, get_low_stock, get_recent_transactions, get_orders_summary
 from query_money import (
     get_monthly_summary,
@@ -159,7 +160,12 @@ async def callback(request: Request):
         user_id = event.get("source", {}).get("userId", "unknown")
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
-        response = await handle_query(text)
+
+        if user_id in BOSS_USER_IDS:
+            response = await handle_query(text)
+        else:
+            response = await handle_customer(text)
+
         logger.info(f"回覆內容：{response[:100]}...")
         await reply_line(reply_token, response)
 

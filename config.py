@@ -8,6 +8,13 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_BOSS_USER_ID = os.getenv("LINE_BOSS_USER_ID", "")
 
+# === 白名單（逗號分隔的 LINE User ID）===
+BOSS_USER_IDS = [
+    uid.strip()
+    for uid in os.getenv("BOSS_USER_IDS", "").split(",")
+    if uid.strip()
+]
+
 # === 系統 API（Railway P2 正式環境）===
 WMS_API_URL = os.getenv("WMS_API_URL", "https://um-wms-p2-production.up.railway.app")
 MONEY_API_URL = os.getenv("MONEY_API_URL", "https://ummoney-p2-production.up.railway.app")

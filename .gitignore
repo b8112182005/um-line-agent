@@ -5,3 +5,5 @@ __pycache__/
 schema_report.json
 .venv/
 venv/
+
+.claude/
