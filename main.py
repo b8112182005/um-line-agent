@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, BOSS_USER_IDS
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID
 from intent import parse_intent
 from chat import humanize
 from customer import handle_customer
@@ -19,6 +19,8 @@ from query_money import (
     get_ar_ap_status,
 )
 from scheduler import setup_scheduler
+from user_db import init_db, get_role, add_pending, get_latest_pending, approve_user, block_user, list_approved, list_pending
+from push import push_message, get_display_name
 
 import httpx
 
@@ -35,12 +37,18 @@ HELP_TEXT = (
     "📊 月收支摘要 —「3月收支」\n"
     "💸 支出明細 —「最近支出」\n"
     "📈 支出分類 —「3月支出分類」\n"
-    "💰 帳款狀態 —「應收應付」"
+    "💰 帳款狀態 —「應收應付」\n"
+    "\n👥 白名單管理：\n"
+    "「名單」— 查看已開通用戶\n"
+    "「待審」— 查看待審核用戶\n"
+    "「通過」— 開通最近一位待審核用戶\n"
+    "「不要」— 拒絕最近一位待審核用戶"
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db(LINE_BOSS_USER_ID)
     scheduler = setup_scheduler()
     scheduler.start()
     logger.info("排程器已啟動")
@@ -80,6 +88,48 @@ async def reply_line(reply_token: str, text: str):
         resp = await client.post(LINE_REPLY_URL, json=body, headers=headers)
         if resp.status_code != 200:
             logger.error(f"LINE reply 失敗：{resp.status_code} {resp.text}")
+
+
+async def handle_boss_admin(text: str) -> str | None:
+    """處理老闆的白名單管理指令，非管理指令回傳 None"""
+    if text == "通過":
+        pending = get_latest_pending()
+        if not pending:
+            return "目前沒有待審核的用戶"
+        approve_user(pending["user_id"])
+        # 通知被開通的用戶
+        await push_message(
+            pending["user_id"],
+            "你好～已開通客服權限，有什麼可以幫你的嗎？😊"
+        )
+        return f"已開通 {pending['display_name']} 的客服權限 ✓"
+
+    if text == "不要":
+        pending = get_latest_pending()
+        if not pending:
+            return "目前沒有待審核的用戶"
+        block_user(pending["user_id"])
+        return f"已拒絕 {pending['display_name']} ✓"
+
+    if text == "名單":
+        users = list_approved()
+        if not users:
+            return "目前沒有已開通的用戶"
+        lines = ["👥 已開通用戶："]
+        for u in users:
+            lines.append(f"  {u['display_name']}")
+        return "\n".join(lines)
+
+    if text == "待審":
+        users = list_pending()
+        if not users:
+            return "目前沒有待審核的用戶"
+        lines = ["⏳ 待審核用戶："]
+        for u in users:
+            lines.append(f"  {u['display_name']}")
+        return "\n".join(lines)
+
+    return None
 
 
 async def handle_query(text: str) -> str:
@@ -137,6 +187,21 @@ async def handle_query(text: str) -> str:
         return "系統忙碌中，請稍後再試"
 
 
+async def handle_unknown_user(user_id: str, reply_token: str):
+    """處理未知用戶：建立 pending、通知老闆、回覆用戶"""
+    display_name = await get_display_name(user_id)
+    add_pending(user_id, display_name)
+
+    # 回覆用戶
+    await reply_line(reply_token, "你好～目前瑀墨助理僅限受邀用戶使用，已通知負責人，請稍候。")
+
+    # 推播通知老闆
+    await push_message(
+        LINE_BOSS_USER_ID,
+        f"有人想使用客服：\n  暱稱：{display_name}\n\n回覆『通過』就開通"
+    )
+
+
 @app.post("/callback")
 async def callback(request: Request):
     signature = request.headers.get("X-Line-Signature", "")
@@ -161,13 +226,30 @@ async def callback(request: Request):
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
 
-        if user_id in BOSS_USER_IDS:
-            response = await handle_query(text)
-        else:
-            response = await handle_customer(text)
+        role = get_role(user_id)
 
-        logger.info(f"回覆內容：{response[:100]}...")
-        await reply_line(reply_token, response)
+        if role == "boss":
+            # 先檢查是否為管理指令
+            admin_response = await handle_boss_admin(text)
+            if admin_response:
+                await reply_line(reply_token, admin_response)
+            else:
+                response = await handle_query(text)
+                await reply_line(reply_token, response)
+
+        elif role == "approved":
+            response = await handle_customer(text)
+            await reply_line(reply_token, response)
+
+        elif role == "pending":
+            await reply_line(reply_token, "正在等老闆審核中，請稍候～")
+
+        elif role == "blocked":
+            await reply_line(reply_token, "目前無法使用此服務，如有需要請直接聯繫瑀墨塗料。")
+
+        else:
+            # 全新用戶
+            await handle_unknown_user(user_id, reply_token)
 
     return {"status": "ok"}
 
