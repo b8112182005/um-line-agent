@@ -7,6 +7,7 @@ load_dotenv()
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_BOSS_USER_ID = os.getenv("LINE_BOSS_USER_ID", "")
+LINE_ENGINEER_USER_ID = os.getenv("LINE_ENGINEER_USER_ID", "")
 
 # === 白名單（逗號分隔的 LINE User ID）===
 BOSS_USER_IDS = [

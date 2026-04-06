@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from intent import parse_intent
 from chat import humanize
 from customer import handle_customer
@@ -48,7 +48,7 @@ HELP_TEXT = (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db(LINE_BOSS_USER_ID)
+    init_db(LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
     scheduler = setup_scheduler()
     scheduler.start()
     logger.info("排程器已啟動")
@@ -228,7 +228,7 @@ async def callback(request: Request):
 
         role = get_role(user_id)
 
-        if role == "boss":
+        if role in ("boss", "engineer"):
             # 先檢查是否為管理指令
             admin_response = await handle_boss_admin(text)
             if admin_response:
