@@ -19,8 +19,13 @@ from query_money import (
     get_ar_ap_status,
 )
 from scheduler import setup_scheduler
-from user_db import init_db, get_role, add_pending, get_latest_pending, approve_user, block_user, list_approved, list_pending
-from push import push_message, get_display_name
+from user_db import (
+    init_db, get_role, add_pending, get_latest_pending, approve_user, block_user,
+    list_approved, list_pending,
+    get_group_status, add_pending_group, get_latest_pending_group,
+    approve_group, block_group, list_allowed_groups,
+)
+from push import push_message, get_display_name, get_group_name, leave_group
 
 import httpx
 
@@ -42,7 +47,11 @@ HELP_TEXT = (
     "「名單」— 查看已開通用戶\n"
     "「待審」— 查看待審核用戶\n"
     "「通過」— 開通最近一位待審核用戶\n"
-    "「不要」— 拒絕最近一位待審核用戶"
+    "「不要」— 拒絕最近一位待審核用戶\n"
+    "\n🏢 群組管理：\n"
+    "「允許」— 允許最近申請的群組\n"
+    "「退群」— 拒絕並離開最近申請的群組\n"
+    "「群組」— 查看已允許的群組"
 )
 
 
@@ -127,6 +136,30 @@ async def handle_boss_admin(text: str) -> str | None:
         lines = ["⏳ 待審核用戶："]
         for u in users:
             lines.append(f"  {u['display_name']}")
+        return "\n".join(lines)
+
+    if text == "允許":
+        pg = get_latest_pending_group()
+        if not pg:
+            return "目前沒有待審核的群組"
+        approve_group(pg["group_id"])
+        return f"已允許群組「{pg['group_name']}」✓"
+
+    if text == "退群":
+        pg = get_latest_pending_group()
+        if not pg:
+            return "目前沒有待審核的群組"
+        block_group(pg["group_id"])
+        await leave_group(pg["group_id"])
+        return f"已拒絕並離開群組「{pg['group_name']}」✓"
+
+    if text == "群組":
+        groups = list_allowed_groups()
+        if not groups:
+            return "目前沒有已允許的群組"
+        lines = ["🏢 已允許群組："]
+        for g in groups:
+            lines.append(f"  {g['group_name']}")
         return "\n".join(lines)
 
     return None
@@ -215,14 +248,57 @@ async def callback(request: Request):
     events = data.get("events", [])
 
     for event in events:
-        if event.get("type") != "message":
+        event_type = event.get("type")
+        source = event.get("source", {})
+        source_type = source.get("type", "")
+
+        # === Bot 被加入群組 ===
+        if event_type == "join" and source_type == "group":
+            group_id = source.get("groupId", "")
+            if group_id:
+                status = get_group_status(group_id)
+                if status == "allowed":
+                    logger.info(f"加入已允許群組：{group_id}")
+                elif status == "blocked":
+                    logger.info(f"被加入已封鎖群組，自動退出：{group_id}")
+                    await leave_group(group_id)
+                else:
+                    # 新群組 → pending，通知工程師/老闆
+                    group_name = await get_group_name(group_id)
+                    add_pending_group(group_id, group_name)
+                    logger.info(f"被加入新群組：{group_name}（{group_id}）")
+                    notify_id = LINE_ENGINEER_USER_ID or LINE_BOSS_USER_ID
+                    await push_message(
+                        notify_id,
+                        f"Bot 被加入群組：\n  名稱：{group_name}\n\n回覆『允許』就留下，回覆『退群』就離開"
+                    )
+            continue
+
+        # === Bot 被踢出群組 ===
+        if event_type == "leave" and source_type == "group":
+            group_id = source.get("groupId", "")
+            logger.info(f"被移出群組：{group_id}")
+            continue
+
+        # === 一般訊息 ===
+        if event_type != "message":
             continue
         if event["message"].get("type") != "text":
             continue
 
         text = event["message"]["text"].strip()
         reply_token = event["replyToken"]
-        user_id = event.get("source", {}).get("userId", "unknown")
+        user_id = source.get("userId", "unknown")
+
+        # 群組內的訊息：只有已允許的群組才回應
+        if source_type == "group":
+            group_id = source.get("groupId", "")
+            if get_group_status(group_id) != "allowed":
+                continue
+            # 群組內走客服模式
+            response = await handle_customer(text)
+            await reply_line(reply_token, response)
+            continue
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
 

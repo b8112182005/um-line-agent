@@ -28,6 +28,37 @@ async def push_message(to_user_id: str, text: str):
             logger.error(f"推播失敗：{resp.status_code} {resp.text}")
 
 
+async def get_group_name(group_id: str) -> str:
+    """透過 LINE API 取得群組名稱"""
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"https://api.line.me/v2/bot/group/{group_id}/summary", headers=headers)
+            if resp.status_code == 200:
+                return resp.json().get("groupName", "未知群組")
+    except Exception as e:
+        logger.warning(f"取得群組名稱失敗：{e}")
+    return "未知群組"
+
+
+async def leave_group(group_id: str):
+    """離開群組"""
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(f"https://api.line.me/v2/bot/group/{group_id}/leave", headers=headers)
+            if resp.status_code == 200:
+                logger.info(f"已離開群組：{group_id}")
+            else:
+                logger.warning(f"離開群組失敗：{resp.status_code}")
+    except Exception as e:
+        logger.error(f"離開群組錯誤：{e}")
+
+
 async def get_display_name(user_id: str) -> str:
     """透過 LINE API 取得用戶顯示名稱"""
     headers = {

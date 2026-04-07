@@ -22,6 +22,14 @@ def init_db(boss_user_id: str, engineer_user_id: str = ""):
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                group_id TEXT PRIMARY KEY,
+                group_name TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
         # 工程師（最高權限）
         if engineer_user_id:
             conn.execute(
@@ -107,3 +115,62 @@ def list_pending() -> list[dict]:
             "SELECT line_user_id, display_name, created_at FROM users WHERE role = 'pending' ORDER BY created_at"
         ).fetchall()
     return [{"user_id": r[0], "display_name": r[1], "created_at": r[2]} for r in rows]
+
+
+# === 群組管理 ===
+
+def get_group_status(group_id: str) -> str | None:
+    """取得群組狀態"""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT status FROM groups WHERE group_id = ?", (group_id,)
+        ).fetchone()
+    return row[0] if row else None
+
+
+def add_pending_group(group_id: str, group_name: str):
+    """新增待審核群組"""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO groups (group_id, group_name, status) VALUES (?, ?, 'pending')",
+            (group_id, group_name),
+        )
+        conn.commit()
+
+
+def get_latest_pending_group() -> dict | None:
+    """取得最近一筆 pending 群組"""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT group_id, group_name FROM groups WHERE status = 'pending' ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+    if row:
+        return {"group_id": row[0], "group_name": row[1]}
+    return None
+
+
+def approve_group(group_id: str):
+    """允許群組"""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE groups SET status = 'allowed' WHERE group_id = ?", (group_id,)
+        )
+        conn.commit()
+
+
+def block_group(group_id: str):
+    """封鎖群組"""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE groups SET status = 'blocked' WHERE group_id = ?", (group_id,)
+        )
+        conn.commit()
+
+
+def list_allowed_groups() -> list[dict]:
+    """列出所有已允許的群組"""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT group_id, group_name, created_at FROM groups WHERE status = 'allowed' ORDER BY created_at"
+        ).fetchall()
+    return [{"group_id": r[0], "group_name": r[1], "created_at": r[2]} for r in rows]
