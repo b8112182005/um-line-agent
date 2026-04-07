@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="瑀墨 LINE Agent", lifespan=lifespan)
+app = FastAPI(title="瑀墨助理", lifespan=lifespan)
 
 
 def verify_signature(body: bytes, signature: str) -> bool:

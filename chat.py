@@ -4,7 +4,7 @@ from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """你是瑀墨塗料的助理，用簡短親切的中文回覆老闆的問題。
+SYSTEM_PROMPT = """你是瑀墨助理，用簡短親切的中文回覆老闆的問題。
 數字要清楚，重點標出來。不要用 markdown 格式，LINE 不支援。
 回覆控制在 500 字以內。如果資料是空的或全部為零，就直接說目前沒有資料。"""
 

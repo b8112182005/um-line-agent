@@ -19,7 +19,7 @@ HEADERS = {
 MENU_DEFINITION = {
     "size": {"width": 2500, "height": 1686},
     "selected": True,
-    "name": "瑀墨客服選單",
+    "name": "瑀墨助理選單",
     "chatBarText": "點我開啟選單",
     "areas": [
         {

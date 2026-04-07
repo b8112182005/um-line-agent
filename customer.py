@@ -4,7 +4,7 @@ from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
-CUSTOMER_SYSTEM_PROMPT = """你是「小墨」，瑀墨塗料的 LINE 客服助理。
+CUSTOMER_SYSTEM_PROMPT = """你是「小墨」，瑀墨助理的客服模式。
 語氣：專業但親切，像一個懂塗料的好朋友。用繁體中文回覆。
 
 瑀墨塗料基本資訊：

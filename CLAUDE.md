@@ -1,7 +1,7 @@
 # um-line-agent
 
 ## 專案概述
-瑀墨塗料 LINE Bot 助理（瑀墨助理），讓老闆在 LINE 上直接查詢倉儲和會計數據。
+瑀墨助理 LINE Bot，讓老闆在 LINE 上直接查詢倉儲和會計數據。
 
 ## 架構
 - FastAPI + uvicorn
@@ -12,7 +12,7 @@
 
 ## 部署
 - Railway: um-line-agent-production.up.railway.app (port 8080)
-- LINE Channel: 瑀墨助理（UMIM Provider）
+- LINE Channel: 瑀墨助理
 - Webhook: https://um-line-agent-production.up.railway.app/callback
 
 ## 身份分流
@@ -21,8 +21,14 @@
 
 ## 環境變數
 LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID,
-BOSS_USER_IDS（逗號分隔白名單）,
+LINE_ENGINEER_USER_ID（工程師最高權限）,
 WMS_API_URL, MONEY_API_URL, API_USERNAME, API_PASSWORD, ANTHROPIC_API_KEY
+
+## 白名單管理
+- SQLite users 表（user_db.py）取代環境變數 BOSS_USER_IDS
+- 角色：engineer > boss > approved > pending > blocked
+- 老闆/工程師可透過聊天管理：通過/不要/名單/待審
+- 陌生人自動 pending → push 通知老闆審核
 
 ## 支援查詢（老闆模式）
 查庫存、低庫存警報、進出貨紀錄、訂單摘要、月收支、支出分類、支出明細、帳款狀態

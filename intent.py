@@ -9,7 +9,7 @@ from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_TEMPLATE = """你是瑀墨塗料的 LINE 助理。根據用戶的訊息，判斷他想查什麼。
+SYSTEM_PROMPT_TEMPLATE = """你是瑀墨助理。根據用戶的訊息，判斷他想查什麼。
 只回傳 JSON，不要回傳其他內容。
 可用的意圖：
 
