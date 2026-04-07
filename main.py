@@ -296,7 +296,7 @@ async def callback(request: Request):
             if get_group_status(group_id) != "allowed":
                 continue
             # 群組內走客服模式
-            response = await handle_customer(text)
+            response = await handle_customer(text, user_id)
             await reply_line(reply_token, response)
             continue
 
@@ -314,7 +314,7 @@ async def callback(request: Request):
                 await reply_line(reply_token, response)
 
         elif role == "approved":
-            response = await handle_customer(text)
+            response = await handle_customer(text, user_id)
             await reply_line(reply_token, response)
 
         elif role == "pending":

@@ -1,8 +1,52 @@
 import logging
+import time
+from collections import defaultdict
+
 import anthropic
 from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
+
+# === 每人每日上限 ===
+DAILY_LIMIT = 20
+_daily_counts: dict[str, dict] = {}  # {user_id: {"date": "2026-04-08", "count": 5}}
+
+
+def _check_limit(user_id: str) -> bool:
+    """檢查是否超過每日上限，回傳 True = 可以繼續"""
+    today = time.strftime("%Y-%m-%d")
+    if user_id not in _daily_counts or _daily_counts[user_id]["date"] != today:
+        _daily_counts[user_id] = {"date": today, "count": 0}
+    if _daily_counts[user_id]["count"] >= DAILY_LIMIT:
+        return False
+    _daily_counts[user_id]["count"] += 1
+    return True
+
+
+def _remaining(user_id: str) -> int:
+    today = time.strftime("%Y-%m-%d")
+    if user_id not in _daily_counts or _daily_counts[user_id]["date"] != today:
+        return DAILY_LIMIT
+    return max(0, DAILY_LIMIT - _daily_counts[user_id]["count"])
+
+
+# === 對話記憶（最近 5 輪）===
+MAX_HISTORY = 5
+_conversations: dict[str, list[dict]] = defaultdict(list)
+
+
+def _get_history(user_id: str) -> list[dict]:
+    return _conversations[user_id]
+
+
+def _add_to_history(user_id: str, user_msg: str, assistant_msg: str):
+    history = _conversations[user_id]
+    history.append({"role": "user", "content": user_msg})
+    history.append({"role": "assistant", "content": assistant_msg})
+    # 只保留最近 5 輪（10 則訊息）
+    if len(history) > MAX_HISTORY * 2:
+        _conversations[user_id] = history[-(MAX_HISTORY * 2):]
+
 
 CUSTOMER_SYSTEM_PROMPT = """你是「小墨」，瑀墨助理的客服模式。
 語氣：專業但親切，像一個懂塗料的好朋友。用繁體中文回覆。
@@ -93,25 +137,41 @@ MENU_RESPONSES = {
 }
 
 
-async def handle_customer(text: str) -> str:
-    """客服模式：觸發文字走固定回覆，其他走 Claude AI 對話"""
-    # 檢查觸發文字
+async def handle_customer(text: str, user_id: str = "anonymous") -> str:
+    """客服模式：觸發文字走固定回覆，其他走 Claude AI 對話（含記憶+限額）"""
+    # 觸發文字不計入額度
     if text in MENU_RESPONSES:
         return MENU_RESPONSES[text]
 
-    # Claude AI 自由對話
+    # 檢查每日上限
+    if not _check_limit(user_id):
+        return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
+
     if not ANTHROPIC_API_KEY:
         return "目前客服系統維護中，請稍後再試。"
 
     try:
+        # 組裝對話歷史
+        history = _get_history(user_id)
+        messages = history + [{"role": "user", "content": text}]
+
         client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         message = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=500,
             system=CUSTOMER_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": text}],
+            messages=messages,
         )
-        return message.content[0].text.strip()
+        reply = message.content[0].text.strip()
+
+        # 記入對話歷史
+        _add_to_history(user_id, text, reply)
+
+        remaining = _remaining(user_id)
+        if remaining <= 5:
+            reply += f"\n\n（今日剩餘 {remaining} 則對話額度）"
+
+        return reply
     except Exception as e:
         logger.error(f"客服 AI 回覆失敗：{e}")
         return "不好意思，系統忙碌中，請稍後再試或直接撥打電話聯繫我們。"
