@@ -56,6 +56,28 @@ def init_db(boss_user_id: str, engineer_user_id: str = ""):
                 "INSERT OR IGNORE INTO users (line_user_id, display_name, role) VALUES (?, ?, ?)",
                 (boss_user_id, "老闆", "boss"),
             )
+
+        # === 種子資料（確保每次啟動都在）===
+        seed_users = [
+            ("Ub9da80369a8d8c161d59c08cf282d783", "張紘瑀", "boss", "葉老闆/瑀墨塗料"),
+            ("Ufbf785909fe2d05e8f0d2ee6784aa321", "悠悠", "approved", ""),
+            ("U7a8bc939ffce3a958dbc8d3cabb7fcc0", "林逸婕", "approved", ""),
+        ]
+        for uid, name, role, note in seed_users:
+            conn.execute(
+                "INSERT OR IGNORE INTO users (line_user_id, display_name, role, note) VALUES (?, ?, ?, ?)",
+                (uid, name, role, note),
+            )
+
+        seed_groups = [
+            ("C5002a72a4fd12f95f97d27dce1858ea1", "瑀墨測試群", "allowed"),
+        ]
+        for gid, gname, status in seed_groups:
+            conn.execute(
+                "INSERT OR IGNORE INTO groups (group_id, group_name, status) VALUES (?, ?, ?)",
+                (gid, gname, status),
+            )
+
         conn.commit()
     logger.info("users DB 初始化完成")
 
