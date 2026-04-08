@@ -19,9 +19,15 @@ def init_db(boss_user_id: str, engineer_user_id: str = ""):
                 line_user_id TEXT PRIMARY KEY,
                 display_name TEXT DEFAULT '',
                 role TEXT DEFAULT 'pending',
+                note TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        # 確保 note 欄位存在（舊 DB 升級）
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN note TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # 欄位已存在
         conn.execute("""
             CREATE TABLE IF NOT EXISTS groups (
                 group_id TEXT PRIMARY KEY,
@@ -103,18 +109,48 @@ def list_approved() -> list[dict]:
     """列出所有已通過的用戶"""
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT line_user_id, display_name, created_at FROM users WHERE role = 'approved' ORDER BY created_at"
+            "SELECT line_user_id, display_name, note, created_at FROM users WHERE role = 'approved' ORDER BY created_at"
         ).fetchall()
-    return [{"user_id": r[0], "display_name": r[1], "created_at": r[2]} for r in rows]
+    return [{"user_id": r[0], "display_name": r[1], "note": r[2] or "", "created_at": r[3]} for r in rows]
 
 
 def list_pending() -> list[dict]:
     """列出所有待審核用戶"""
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT line_user_id, display_name, created_at FROM users WHERE role = 'pending' ORDER BY created_at"
+            "SELECT line_user_id, display_name, note, created_at FROM users WHERE role = 'pending' ORDER BY created_at"
         ).fetchall()
-    return [{"user_id": r[0], "display_name": r[1], "created_at": r[2]} for r in rows]
+    return [{"user_id": r[0], "display_name": r[1], "note": r[2] or "", "created_at": r[3]} for r in rows]
+
+
+def set_note(user_id: str, note: str):
+    """設定用戶備註"""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE users SET note = ? WHERE line_user_id = ?", (note, user_id)
+        )
+        conn.commit()
+
+
+def remove_user(user_id: str) -> bool:
+    """移除用戶（只能移除 approved/pending/blocked）"""
+    with _conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM users WHERE line_user_id = ? AND role NOT IN ('boss', 'engineer')",
+            (user_id,)
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def find_user_by_name(name: str) -> list[dict]:
+    """用暱稱模糊搜尋用戶"""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT line_user_id, display_name, role, note FROM users WHERE display_name LIKE ? AND role NOT IN ('boss', 'engineer')",
+            (f"%{name}%",)
+        ).fetchall()
+    return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or ""} for r in rows]
 
 
 # === 群組管理 ===

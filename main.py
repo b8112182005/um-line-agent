@@ -21,7 +21,7 @@ from query_money import (
 from scheduler import setup_scheduler
 from user_db import (
     init_db, get_role, add_pending, get_latest_pending, approve_user, block_user,
-    list_approved, list_pending,
+    list_approved, list_pending, set_note, remove_user, find_user_by_name,
     get_group_status, add_pending_group, get_latest_pending_group,
     approve_group, block_group, list_allowed_groups,
 )
@@ -48,6 +48,9 @@ HELP_TEXT = (
     "「待審」— 查看待審核用戶\n"
     "「通過」— 開通最近一位待審核用戶\n"
     "「不要」— 拒絕最近一位待審核用戶\n"
+    "「備註 暱稱 內容」— 加備註（如：備註 王小明 油漆包商）\n"
+    "「移除 暱稱」— 移除用戶\n"
+    "「查 暱稱」— 搜尋用戶\n"
     "\n🏢 群組管理：\n"
     "「允許」— 允許最近申請的群組\n"
     "「退群」— 拒絕並離開最近申請的群組\n"
@@ -126,7 +129,8 @@ async def handle_boss_admin(text: str) -> str | None:
             return "目前沒有已開通的用戶"
         lines = ["👥 已開通用戶："]
         for u in users:
-            lines.append(f"  {u['display_name']}")
+            note_str = f"｜{u['note']}" if u['note'] else ""
+            lines.append(f"  {u['display_name']}{note_str}")
         return "\n".join(lines)
 
     if text == "待審":
@@ -135,7 +139,8 @@ async def handle_boss_admin(text: str) -> str | None:
             return "目前沒有待審核的用戶"
         lines = ["⏳ 待審核用戶："]
         for u in users:
-            lines.append(f"  {u['display_name']}")
+            note_str = f"｜{u['note']}" if u['note'] else ""
+            lines.append(f"  {u['display_name']}{note_str}")
         return "\n".join(lines)
 
     if text == "允許":
@@ -160,6 +165,56 @@ async def handle_boss_admin(text: str) -> str | None:
         lines = ["🏢 已允許群組："]
         for g in groups:
             lines.append(f"  {g['group_name']}")
+        return "\n".join(lines)
+
+    # 備註 暱稱 內容
+    if text.startswith("備註 "):
+        parts = text[3:].strip().split(" ", 1)
+        if len(parts) < 2:
+            return "格式：備註 暱稱 內容\n例如：備註 王小明 油漆包商"
+        name, note = parts[0], parts[1]
+        users = find_user_by_name(name)
+        if not users:
+            return f"找不到暱稱含「{name}」的用戶"
+        if len(users) > 1:
+            lines = [f"找到 {len(users)} 位，請用更精確的名字："]
+            for u in users:
+                lines.append(f"  {u['display_name']}（{u['role']}）")
+            return "\n".join(lines)
+        target = users[0]
+        set_note(target["user_id"], note)
+        return f"已為 {target['display_name']} 加備註：{note} ✓"
+
+    # 移除 暱稱
+    if text.startswith("移除 "):
+        name = text[3:].strip()
+        if not name:
+            return "格式：移除 暱稱\n例如：移除 王小明"
+        users = find_user_by_name(name)
+        if not users:
+            return f"找不到暱稱含「{name}」的用戶"
+        if len(users) > 1:
+            lines = [f"找到 {len(users)} 位，請用更精確的名字："]
+            for u in users:
+                lines.append(f"  {u['display_name']}（{u['role']}）")
+            return "\n".join(lines)
+        target = users[0]
+        if remove_user(target["user_id"]):
+            return f"已移除 {target['display_name']} ✓"
+        return f"無法移除 {target['display_name']}（boss/engineer 不可移除）"
+
+    # 查 暱稱
+    if text.startswith("查 "):
+        name = text[2:].strip()
+        if not name:
+            return "格式：查 暱稱"
+        users = find_user_by_name(name)
+        if not users:
+            return f"找不到暱稱含「{name}」的用戶"
+        lines = [f"搜尋結果（{len(users)} 位）："]
+        for u in users:
+            note_str = f"｜{u['note']}" if u['note'] else ""
+            lines.append(f"  {u['display_name']}（{u['role']}）{note_str}")
         return "\n".join(lines)
 
     return None
