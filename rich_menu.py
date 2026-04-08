@@ -45,6 +45,9 @@ BOSS_LABELS = [
 ]
 
 # === 客戶選單 ===
+# 官網 URL（佔位，之後替換為正式網址）
+WEBSITE_URL = "https://yumo-website.vercel.app"
+
 CUSTOMER_MENU = {
     "size": {"width": 2500, "height": 1686},
     "selected": True,
@@ -54,22 +57,22 @@ CUSTOMER_MENU = {
         {"bounds": {"x": 0, "y": 0, "width": 1250, "height": 562},
          "action": {"type": "message", "text": "產品介紹"}},
         {"bounds": {"x": 1250, "y": 0, "width": 1250, "height": 562},
-         "action": {"type": "message", "text": "我要備料"}},
+         "action": {"type": "uri", "uri": WEBSITE_URL + "/order", "label": "線上備料"}},
         {"bounds": {"x": 0, "y": 562, "width": 1250, "height": 562},
          "action": {"type": "message", "text": "工程服務"}},
         {"bounds": {"x": 1250, "y": 562, "width": 1250, "height": 562},
-         "action": {"type": "message", "text": "常見問題"}},
+         "action": {"type": "uri", "uri": WEBSITE_URL + "/portfolio", "label": "作品集"}},
         {"bounds": {"x": 0, "y": 1124, "width": 1250, "height": 562},
-         "action": {"type": "message", "text": "聯絡方式"}},
+         "action": {"type": "message", "text": "常見問題"}},
         {"bounds": {"x": 1250, "y": 1124, "width": 1250, "height": 562},
-         "action": {"type": "message", "text": "服務流程"}},
+         "action": {"type": "message", "text": "聯絡方式"}},
     ],
 }
 
 CUSTOMER_LABELS = [
-    ("產品介紹", "備料詢問"),
-    ("工程服務", "常見問題"),
-    ("聯絡我們", "服務流程"),
+    ("產品介紹", "線上備料"),
+    ("工程服務", "作品集"),
+    ("常見問題", "聯絡我們"),
 ]
 
 
