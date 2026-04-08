@@ -1,10 +1,13 @@
+import os
 import sqlite3
 import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "users.db"
+# Railway volume 掛載在 /data，本機開發用當前目錄
+_data_dir = "/data" if os.path.isdir("/data") else "."
+DB_PATH = os.path.join(_data_dir, "users.db")
 
 
 def _conn():
