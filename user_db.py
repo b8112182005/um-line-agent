@@ -123,6 +123,15 @@ def list_pending() -> list[dict]:
     return [{"user_id": r[0], "display_name": r[1], "note": r[2] or "", "created_at": r[3]} for r in rows]
 
 
+def list_all_users() -> list[dict]:
+    """列出所有用戶"""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT line_user_id, display_name, role, note, created_at FROM users ORDER BY role, created_at"
+        ).fetchall()
+    return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or "", "created_at": r[4]} for r in rows]
+
+
 def set_note(user_id: str, note: str):
     """設定用戶備註"""
     with _conn() as conn:

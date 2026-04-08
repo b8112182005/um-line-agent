@@ -21,7 +21,7 @@ from query_money import (
 from scheduler import setup_scheduler
 from user_db import (
     init_db, get_role, add_pending, get_latest_pending, approve_user, block_user,
-    list_approved, list_pending, set_note, remove_user, find_user_by_name,
+    list_approved, list_pending, list_all_users, set_note, remove_user, find_user_by_name,
     get_group_status, add_pending_group, get_latest_pending_group,
     approve_group, block_group, list_allowed_groups,
 )
@@ -51,6 +51,7 @@ HELP_TEXT = (
     "「備註 暱稱 內容」— 加備註（如：備註 王小明 油漆包商）\n"
     "「移除 暱稱」— 移除用戶\n"
     "「查 暱稱」— 搜尋用戶\n"
+    "「全部」— 列出所有用戶（含角色）\n"
     "\n🏢 群組管理：\n"
     "「允許」— 允許最近申請的群組\n"
     "「退群」— 拒絕並離開最近申請的群組\n"
@@ -202,6 +203,18 @@ async def handle_boss_admin(text: str) -> str | None:
         if remove_user(target["user_id"]):
             return f"已移除 {target['display_name']} ✓"
         return f"無法移除 {target['display_name']}（boss/engineer 不可移除）"
+
+    if text == "全部":
+        users = list_all_users()
+        if not users:
+            return "目前沒有任何用戶"
+        role_label = {"engineer": "工程師", "boss": "老闆", "approved": "已開通", "pending": "待審核", "blocked": "已拒絕"}
+        lines = [f"📋 全部用戶（{len(users)} 位）："]
+        for u in users:
+            label = role_label.get(u["role"], u["role"])
+            note_str = f"｜{u['note']}" if u['note'] else ""
+            lines.append(f"  [{label}] {u['display_name']}{note_str}")
+        return "\n".join(lines)
 
     # 查 暱稱
     if text.startswith("查 "):
