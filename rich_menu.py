@@ -68,54 +68,56 @@ def _draw_rounded_rect(draw, xy, radius, fill):
 
 def generate_menu_image(labels, style, path):
     """產生 2500x1686 的選單圖片"""
-    bg = style["bg"]
-    card = style["card"]
-    text_color = style["text"]
-    accent = style["accent"]
+    W, H = 2500, 1686
+    cell_w = W // 2
+    cell_h = H // 3
 
-    img = Image.new("RGB", (2500, 1686), bg)
+    # 底圖
+    if style.get("bg_image"):
+        img = Image.open(style["bg_image"]).convert("RGB").resize((W, H), Image.LANCZOS)
+    else:
+        img = Image.new("RGB", (W, H), style.get("bg", "#1a3a5c"))
+
+    # 半透明暗色遮罩（讓文字更清晰）
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ov_draw = ImageDraw.Draw(overlay)
+    for row in range(3):
+        for col in range(2):
+            x, y = col * cell_w, row * cell_h
+            ov_draw.rectangle((x, y, x + cell_w, y + cell_h), fill=(0, 0, 0, 70))
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+
     draw = ImageDraw.Draw(img)
-    font = _load_font(56)
-    small_font = _load_font(32)
+    line_color = style.get("line_color", "#C9A84C")
+    text_color = style.get("text", "#ffffff")
+    font = _load_font(96)
 
-    pad = 40        # 外邊距
-    gap = 24        # 格子間距
-    cell_w = (2500 - pad * 2 - gap) // 2
-    cell_h = (1686 - pad * 2 - gap * 2) // 3
+    # 金色格線
+    draw.line([(cell_w, 0), (cell_w, H)], fill=line_color, width=4)
+    draw.line([(0, cell_h), (W, cell_h)], fill=line_color, width=4)
+    draw.line([(0, cell_h * 2), (W, cell_h * 2)], fill=line_color, width=4)
 
+    # 文字標籤（陰影 + 主色）
     for row_idx, (left, right) in enumerate(labels):
         for col_idx, label in enumerate([left, right]):
-            x = pad + col_idx * (cell_w + gap)
-            y = pad + row_idx * (cell_h + gap)
-
-            # 卡片背景（圓角）
-            _draw_rounded_rect(draw, (x, y, x + cell_w, y + cell_h), radius=28, fill=card)
-
-            # 頂部裝飾線
-            draw.rounded_rectangle(
-                (x + cell_w // 2 - 40, y + 60, x + cell_w // 2 + 40, y + 66),
-                radius=3, fill=accent,
-            )
-
-            # 文字
+            x, y = col_idx * cell_w, row_idx * cell_h
             bbox = draw.textbbox((0, 0), label, font=font)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
             tx = x + (cell_w - tw) // 2
-            ty = y + (cell_h - th) // 2 + 20
+            ty = y + (cell_h - th) // 2
+            draw.text((tx + 3, ty + 3), label, fill=(0, 0, 0, 160), font=font)
             draw.text((tx, ty), label, fill=text_color, font=font)
 
-    img.save(path, quality=95)
+    img.save(path, format="JPEG", quality=85, optimize=True)
     logger.info(f"選單圖片已產生：{path}")
     return path
 
 
-# 品牌藍風格
+# 品牌背景圖風格
 UNIFIED_STYLE = {
-    "bg": "#1a3a5c",
-    "card": "#2B5C8A",
+    "bg_image": "rich_menu_bg.png",  # 底圖
     "text": "#ffffff",
-    "accent": "#5cb8ff",
+    "line_color": "#C9A84C",         # 金色格線
 }
 
 
@@ -134,7 +136,7 @@ def _create_menu(definition, labels, style, img_name):
     with open(img_path, "rb") as f:
         resp = httpx.post(
             f"https://api-data.line.me/v2/bot/richmenu/{menu_id}/content",
-            headers={**HEADERS, "Content-Type": "image/png"},
+            headers={**HEADERS, "Content-Type": "image/jpeg"},
             content=f.read(), timeout=30,
         )
     resp.raise_for_status()
@@ -164,7 +166,7 @@ def setup_rich_menus():
             logger.info(f"已刪除舊選單：{menu['richMenuId']}")
 
     # 建立統一選單並設為預設
-    menu_id = _create_menu(UNIFIED_MENU, UNIFIED_LABELS, UNIFIED_STYLE, "rich_menu_unified.png")
+    menu_id = _create_menu(UNIFIED_MENU, UNIFIED_LABELS, UNIFIED_STYLE, "rich_menu_unified.jpg")
     resp = httpx.post(f"{LINE_API}/user/all/richmenu/{menu_id}", headers=HEADERS, timeout=15)
     resp.raise_for_status()
     logger.info(f"統一選單已設為預設：{menu_id}")

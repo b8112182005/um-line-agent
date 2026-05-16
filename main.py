@@ -101,73 +101,69 @@ def verify_signature(body: bytes, signature: str) -> bool:
 
 
 def _make_contact_flex(contact: dict) -> dict:
-    return {
-        "type": "flex",
-        "altText": f"{contact['name']}聯絡資訊",
-        "contents": {
-            "type": "bubble",
-            "size": "kilo",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#2B5C8A",
-                "paddingAll": "16px",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": contact["name"],
-                        "color": "#ffffff",
-                        "size": "lg",
-                        "weight": "bold",
-                    }
-                ],
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "paddingAll": "16px",
-                "contents": [
-                    {
-                        "type": "box",
-                        "layout": "horizontal",
-                        "contents": [
-                            {"type": "text", "text": "LINE ID", "color": "#888888", "size": "sm", "flex": 3},
-                            {"type": "text", "text": contact["line_id"], "size": "sm", "flex": 5, "wrap": True},
-                        ],
-                    },
-                    {
-                        "type": "box",
-                        "layout": "horizontal",
-                        "contents": [
-                            {"type": "text", "text": "電話", "color": "#888888", "size": "sm", "flex": 3},
-                            {
-                                "type": "text",
-                                "text": contact["phone"],
-                                "size": "sm",
-                                "flex": 5,
-                                "action": {"type": "uri", "label": "撥打", "uri": f"tel:{contact['phone'].replace('-', '')}"},
-                            },
-                        ],
-                    },
-                ],
-            },
-            "footer": {
-                "type": "box",
-                "layout": "vertical",
-                "paddingAll": "12px",
-                "contents": [
-                    {
-                        "type": "button",
-                        "action": {"type": "uri", "label": "開啟 LINE 名片", "uri": contact["line_link"]},
-                        "style": "primary",
-                        "color": "#2B5C8A",
-                        "height": "sm",
-                    }
-                ],
-            },
+    line_id = contact["line_id"]
+    phone = contact["phone"]
+    line_link = contact["line_link"]
+
+    phone_node = {"type": "text", "text": phone, "size": "sm", "flex": 5}
+    if phone != "TODO":
+        phone_node["action"] = {"type": "uri", "label": "撥打", "uri": f"tel:{phone.replace('-', '')}"}
+
+    bubble: dict = {
+        "type": "bubble",
+        "size": "kilo",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#2B5C8A",
+            "paddingAll": "16px",
+            "contents": [
+                {"type": "text", "text": contact["name"], "color": "#ffffff", "size": "lg", "weight": "bold"}
+            ],
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "paddingAll": "16px",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {"type": "text", "text": "LINE ID", "color": "#888888", "size": "sm", "flex": 3},
+                        {"type": "text", "text": line_id, "size": "sm", "flex": 5, "wrap": True},
+                    ],
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {"type": "text", "text": "電話", "color": "#888888", "size": "sm", "flex": 3},
+                        phone_node,
+                    ],
+                },
+            ],
         },
     }
+
+    if line_link != "TODO":
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "12px",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {"type": "uri", "label": "開啟 LINE 名片", "uri": line_link},
+                    "style": "primary",
+                    "color": "#2B5C8A",
+                    "height": "sm",
+                }
+            ],
+        }
+
+    return {"type": "flex", "altText": f"{contact['name']}聯絡資訊", "contents": bubble}
 
 
 async def reply_flex(reply_token: str, flex_message: dict):
