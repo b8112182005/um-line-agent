@@ -1,9 +1,11 @@
+import datetime
 import logging
 import time
 from collections import defaultdict
 
 import anthropic
-from config import ANTHROPIC_API_KEY
+from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID
+from push import get_display_name, push_message
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,43 @@ MENU_RESPONSES = {
 }
 
 
+# === 非上班時間（週一至週六 08:00–18:00）===
+_OFF_HOURS_NOTE = "\n\n（目前非服務時間，專人將於週一至週六 08:00 起處理，急事請直撥電話）"
+
+
+def _is_business_hours() -> bool:
+    now = datetime.datetime.now()
+    if now.weekday() == 6:  # 週日
+        return False
+    return 8 <= now.hour < 18
+
+
+# === 轉真人 ===
+_HUMAN_KEYWORDS = ["真人", "人工", "客服人員", "找人", "要找人", "幫我聯絡"]
+
+_HUMAN_TRANSFER_REPLY = (
+    "好的！已通知專人，稍後會主動聯絡您。\n\n"
+    "如需立即聯繫：\n"
+    "塗料部門：葉采鑫 Ken 0930-691-134\n"
+    "工程部門：張紘瑀 Aaron 0987-852-157"
+)
+
+
+def _wants_human(text: str) -> bool:
+    return any(k in text for k in _HUMAN_KEYWORDS)
+
+
+# === 備料需求偵測（依 AI 回覆內容判斷）===
+def _is_demand_collected(reply: str) -> bool:
+    return "記錄下來" in reply or "專人會盡快跟您聯繫" in reply
+
+
+# === 連續 AI 回答計數（每 N 輪主動提示可找真人）===
+_ai_turn_counts: dict[str, int] = {}
+SUGGEST_HUMAN_AFTER = 3
+
+
+# === Prompt injection ===
 _INJECTION_PATTERNS = [
     "忽略", "ignore", "forget", "disregard",
     "系統提示", "system prompt", "你的指令", "你的規則", "你的設定",
@@ -166,14 +205,31 @@ def _is_injection(text: str) -> bool:
 
 async def handle_customer(text: str, user_id: str = "anonymous") -> str:
     """客服模式：觸發文字走固定回覆，其他走 Claude AI 對話（含記憶+限額）"""
-    # 觸發文字不計入額度
+    # 觸發文字不計入額度，重置連續計數
     if text in MENU_RESPONSES:
+        _ai_turn_counts[user_id] = 0
         return MENU_RESPONSES[text]
 
     # Prompt injection 攔截（不計入額度）
     if _is_injection(text):
         logger.warning(f"疑似 prompt injection，user={user_id}，text={text[:80]}")
         return _INJECTION_REPLY
+
+    # 轉真人請求（不計入額度）
+    if _wants_human(text):
+        _ai_turn_counts[user_id] = 0
+        display_name = await get_display_name(user_id)
+        history = _get_history(user_id)
+        context_lines = [
+            f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
+            for m in history[-4:]
+        ]
+        context = "\n".join(context_lines) + f"\n客人：{text}" if context_lines else f"客人：{text}"
+        await push_message(
+            LINE_BOSS_USER_ID,
+            f"🔔 客人請求人工客服\n客人：{display_name}\n─────────────\n{context}",
+        )
+        return _HUMAN_TRANSFER_REPLY
 
     # 檢查每日上限
     if not _check_limit(user_id):
@@ -183,7 +239,6 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         return "目前客服系統維護中，請稍後再試。"
 
     try:
-        # 組裝對話歷史
         history = _get_history(user_id)
         messages = history + [{"role": "user", "content": text}]
 
@@ -199,9 +254,33 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         # 記入對話歷史
         _add_to_history(user_id, text, reply)
 
+        # 備料需求偵測：AI 判斷已收集到需求時推播給業務
+        if _is_demand_collected(reply):
+            display_name = await get_display_name(user_id)
+            history_now = _get_history(user_id)
+            context = "\n".join(
+                f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
+                for m in history_now[-6:]
+            )
+            await push_message(
+                LINE_BOSS_USER_ID,
+                f"📦 新備料需求\n客人：{display_name}\n─────────────\n{context}",
+            )
+
+        # 連續 AI 回答 N 輪後主動提示可找真人
+        _ai_turn_counts[user_id] = _ai_turn_counts.get(user_id, 0) + 1
+        if _ai_turn_counts[user_id] >= SUGGEST_HUMAN_AFTER:
+            reply += "\n\n（若需要專人協助，直接說「找真人」即可）"
+            _ai_turn_counts[user_id] = 0
+
+        # 額度警告
         remaining = _remaining(user_id)
         if remaining <= 5:
             reply += f"\n\n（今日剩餘 {remaining} 則對話額度）"
+
+        # 非上班時間附注
+        if not _is_business_hours():
+            reply += _OFF_HOURS_NOTE
 
         return reply
     except Exception as e:
