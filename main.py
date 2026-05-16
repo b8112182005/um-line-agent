@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
+from customer import MENU_RESPONSES
 from intent import parse_intent
 from chat import humanize
 from customer import handle_customer
@@ -31,6 +32,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
+
+# 塗料/工程部門聯絡資訊（等老闆給 ID 後填入）
+CONTACTS = {
+    "塗料部門": {
+        "name": "瑀墨塗料部門",
+        "line_id": "TODO",        # 填入 LINE ID
+        "phone": "TODO",          # 填入電話，例：04-2345-6789
+        "line_link": "TODO",      # 填入 line://ti/p/~xxx 或 https://line.me/R/ti/p/@xxx
+    },
+    "工程部門": {
+        "name": "瑀墨工程部門",
+        "line_id": "TODO",
+        "phone": "TODO",
+        "line_link": "TODO",
+    },
+}
+
+# 統一選單觸發文字（塗料/工程走 Flex 名片，產品/FAQ 走固定文字）
+UNIVERSAL_KEYWORDS = {"塗料部門", "工程部門", "產品介紹", "常見問題"}
 
 HELP_TEXT = (
     "我可以幫你查以下資訊：\n"
@@ -78,6 +98,91 @@ def verify_signature(body: bytes, signature: str) -> bool:
     if not ok:
         logger.warning(f"Signature 驗證失敗")
     return ok
+
+
+def _make_contact_flex(contact: dict) -> dict:
+    return {
+        "type": "flex",
+        "altText": f"{contact['name']}聯絡資訊",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#2B5C8A",
+                "paddingAll": "16px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": contact["name"],
+                        "color": "#ffffff",
+                        "size": "lg",
+                        "weight": "bold",
+                    }
+                ],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "paddingAll": "16px",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "contents": [
+                            {"type": "text", "text": "LINE ID", "color": "#888888", "size": "sm", "flex": 3},
+                            {"type": "text", "text": contact["line_id"], "size": "sm", "flex": 5, "wrap": True},
+                        ],
+                    },
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "contents": [
+                            {"type": "text", "text": "電話", "color": "#888888", "size": "sm", "flex": 3},
+                            {
+                                "type": "text",
+                                "text": contact["phone"],
+                                "size": "sm",
+                                "flex": 5,
+                                "action": {"type": "uri", "label": "撥打", "uri": f"tel:{contact['phone'].replace('-', '')}"},
+                            },
+                        ],
+                    },
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "paddingAll": "12px",
+                "contents": [
+                    {
+                        "type": "button",
+                        "action": {"type": "uri", "label": "開啟 LINE 名片", "uri": contact["line_link"]},
+                        "style": "primary",
+                        "color": "#2B5C8A",
+                        "height": "sm",
+                    }
+                ],
+            },
+        },
+    }
+
+
+async def reply_flex(reply_token: str, flex_message: dict):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    body = {
+        "replyToken": reply_token,
+        "messages": [flex_message],
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(LINE_REPLY_URL, json=body, headers=headers)
+        if resp.status_code != 200:
+            logger.error(f"LINE flex reply 失敗：{resp.status_code} {resp.text}")
 
 
 async def reply_line(reply_token: str, text: str):
@@ -319,6 +424,14 @@ async def callback(request: Request):
         user_id = source.get("userId", "unknown")
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
+
+        # 統一選單按鈕：所有用戶皆可使用，不受角色限制
+        if text in CONTACTS:
+            await reply_flex(reply_token, _make_contact_flex(CONTACTS[text]))
+            continue
+        if text in MENU_RESPONSES and text in ("產品介紹", "常見問題"):
+            await reply_line(reply_token, MENU_RESPONSES[text])
+            continue
 
         role = get_role(user_id)
 
