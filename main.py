@@ -41,9 +41,9 @@ CONTACTS = {
         "name": "瑀墨塗料部門",
         "person": "葉采鑫 Ken｜Manager 經理",
         "card_image": f"{_BASE_URL}/assets/card_paint.jpg",
-        "line_id": "TODO",        # 待填入 LINE ID
+        "line_id": "kenya123456789",
         "phone": "0930-691-134",
-        "line_link": "TODO",      # 待填入 line://ti/p/~xxx
+        "line_link": "line://ti/p/~kenya123456789",
     },
     "工程部門": {
         "name": "瑀墨工程部門",
