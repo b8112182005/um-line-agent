@@ -22,10 +22,10 @@ from query_money import (
 )
 from scheduler import setup_scheduler
 from user_db import (
-    init_db, get_role, add_pending, get_latest_pending, approve_user, block_user,
+    init_db, get_role, get_latest_pending, approve_user, block_user,
     list_approved, list_pending, list_all_users, set_note, remove_user, find_user_by_name,
 )
-from push import push_message, get_display_name, leave_group
+from push import push_message, leave_group
 
 import httpx
 
@@ -394,20 +394,6 @@ async def handle_query(text: str) -> str:
         return "系統忙碌中，請稍後再試"
 
 
-async def handle_unknown_user(user_id: str, reply_token: str):
-    """處理未知用戶：建立 pending、通知老闆、回覆用戶"""
-    display_name = await get_display_name(user_id)
-    add_pending(user_id, display_name)
-
-    # 回覆用戶
-    await reply_line(reply_token, "你好～目前瑀墨助理僅限受邀用戶使用，已通知負責人，請稍候。")
-
-    # 推播通知老闆
-    await push_message(
-        LINE_BOSS_USER_ID,
-        f"有人想使用客服：\n  暱稱：{display_name}\n\n回覆『通過』就開通"
-    )
-
 
 @app.post("/callback")
 async def callback(request: Request):
@@ -467,7 +453,6 @@ async def callback(request: Request):
         role = get_role(user_id)
 
         if role in ("boss", "engineer"):
-            # 先檢查是否為管理指令
             admin_response = await handle_boss_admin(text)
             if admin_response:
                 await reply_line(reply_token, admin_response)
@@ -475,19 +460,10 @@ async def callback(request: Request):
                 response = await handle_query(text)
                 await reply_line(reply_token, response)
 
-        elif role == "approved":
+        else:
+            # 所有其他用戶直接進客服模式（小墨）
             response = await handle_customer(text, user_id)
             await reply_line(reply_token, response)
-
-        elif role == "pending":
-            await reply_line(reply_token, "正在等老闆審核中，請稍候～")
-
-        elif role == "blocked":
-            await reply_line(reply_token, "目前無法使用此服務，如有需要請直接聯繫瑀墨塗料。")
-
-        else:
-            # 全新用戶
-            await handle_unknown_user(user_id, reply_token)
 
     return {"status": "ok"}
 
