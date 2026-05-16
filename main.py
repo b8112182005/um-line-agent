@@ -104,43 +104,67 @@ def _make_contact_flex(contact: dict) -> dict:
     line_id = contact["line_id"]
     phone = contact["phone"]
     line_link = contact["line_link"]
+    ready = line_id != "TODO"
 
-    phone_node = {"type": "text", "text": phone, "size": "sm", "flex": 5}
-    if phone != "TODO":
-        phone_node["action"] = {"type": "uri", "label": "撥打", "uri": f"tel:{phone.replace('-', '')}"}
+    # LINE ID 列：點擊複製
+    line_id_value: dict = {
+        "type": "text", "text": line_id if ready else "確認中...",
+        "size": "sm", "flex": 5, "wrap": True, "color": "#2B5C8A" if ready else "#aaaaaa",
+    }
+    if ready:
+        line_id_value["action"] = {"type": "clipboard", "clipboardText": line_id, "label": "複製"}
+
+    # 電話列：點擊撥打
+    phone_ready = phone != "TODO"
+    phone_value: dict = {
+        "type": "text", "text": phone if phone_ready else "確認中...",
+        "size": "sm", "flex": 5, "color": "#2B5C8A" if phone_ready else "#aaaaaa",
+    }
+    if phone_ready:
+        phone_value["action"] = {"type": "uri", "label": "撥打", "uri": f"tel:{phone.replace('-', '')}"}
 
     bubble: dict = {
         "type": "bubble",
-        "size": "kilo",
+        "size": "mega",
         "header": {
             "type": "box",
             "layout": "vertical",
-            "backgroundColor": "#2B5C8A",
-            "paddingAll": "16px",
+            "backgroundColor": "#1a1a2e",
+            "paddingAll": "20px",
             "contents": [
-                {"type": "text", "text": contact["name"], "color": "#ffffff", "size": "lg", "weight": "bold"}
+                {"type": "text", "text": contact["name"], "color": "#C9A84C", "size": "xl", "weight": "bold"},
+                {"type": "text", "text": "瑀墨塗料有限公司", "color": "#888888", "size": "xs", "margin": "sm"},
             ],
         },
         "body": {
             "type": "box",
             "layout": "vertical",
             "spacing": "md",
-            "paddingAll": "16px",
+            "paddingAll": "20px",
             "contents": [
                 {
-                    "type": "box",
-                    "layout": "horizontal",
+                    "type": "box", "layout": "horizontal", "spacing": "md",
                     "contents": [
                         {"type": "text", "text": "LINE ID", "color": "#888888", "size": "sm", "flex": 3},
-                        {"type": "text", "text": line_id, "size": "sm", "flex": 5, "wrap": True},
+                        line_id_value,
+                        *(
+                            [{"type": "text", "text": "點擊複製", "color": "#C9A84C", "size": "xs", "flex": 2, "align": "end",
+                              "action": {"type": "clipboard", "clipboardText": line_id, "label": "複製"}}]
+                            if ready else []
+                        ),
                     ],
                 },
+                {"type": "separator", "color": "#eeeeee"},
                 {
-                    "type": "box",
-                    "layout": "horizontal",
+                    "type": "box", "layout": "horizontal", "spacing": "md",
                     "contents": [
                         {"type": "text", "text": "電話", "color": "#888888", "size": "sm", "flex": 3},
-                        phone_node,
+                        phone_value,
+                        *(
+                            [{"type": "text", "text": "點擊撥打", "color": "#C9A84C", "size": "xs", "flex": 2, "align": "end",
+                              "action": {"type": "uri", "label": "撥打", "uri": f"tel:{phone.replace('-', '')}"}}]
+                            if phone_ready else []
+                        ),
                     ],
                 },
             ],
@@ -149,16 +173,12 @@ def _make_contact_flex(contact: dict) -> dict:
 
     if line_link != "TODO":
         bubble["footer"] = {
-            "type": "box",
-            "layout": "vertical",
-            "paddingAll": "12px",
+            "type": "box", "layout": "vertical", "paddingAll": "16px",
             "contents": [
                 {
                     "type": "button",
                     "action": {"type": "uri", "label": "開啟 LINE 名片", "uri": line_link},
-                    "style": "primary",
-                    "color": "#2B5C8A",
-                    "height": "sm",
+                    "style": "primary", "color": "#C9A84C", "height": "sm",
                 }
             ],
         }
