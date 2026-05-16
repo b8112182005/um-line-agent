@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from customer import MENU_RESPONSES
@@ -34,10 +35,12 @@ logger = logging.getLogger(__name__)
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
 # 塗料/工程部門聯絡資訊（等老闆給 ID 後填入）
+_BASE_URL = "https://um-line-agent-production.up.railway.app"
 CONTACTS = {
     "塗料部門": {
         "name": "瑀墨塗料部門",
         "person": "葉采鑫 Ken｜Manager 經理",
+        "card_image": f"{_BASE_URL}/assets/card_paint.jpg",
         "line_id": "TODO",        # 待填入 LINE ID
         "phone": "0930-691-134",
         "line_link": "TODO",      # 待填入 line://ti/p/~xxx
@@ -45,6 +48,7 @@ CONTACTS = {
     "工程部門": {
         "name": "瑀墨工程部門",
         "person": "張紘瑀 Aaron｜Manager 經理",
+        "card_image": f"{_BASE_URL}/assets/card_eng.jpg",
         "line_id": "TODO",        # 待填入 LINE ID
         "phone": "0987-852-157",
         "line_link": "TODO",      # 待填入 line://ti/p/~xxx
@@ -86,6 +90,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="瑀墨助理", lifespan=lifespan)
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
@@ -128,6 +133,13 @@ def _make_contact_flex(contact: dict) -> dict:
     bubble: dict = {
         "type": "bubble",
         "size": "mega",
+        "hero": {
+            "type": "image",
+            "url": contact["card_image"],
+            "size": "full",
+            "aspectRatio": "20:13",
+            "aspectMode": "cover",
+        },
         "header": {
             "type": "box",
             "layout": "vertical",
