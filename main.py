@@ -49,9 +49,9 @@ CONTACTS = {
         "name": "瑀墨工程部門",
         "person": "張紘瑀 Aaron｜Manager 經理",
         "card_image": f"{_BASE_URL}/assets/card_eng.jpg",
-        "line_id": "TODO",        # 待填入 LINE ID
+        "line_id": "0987852157",
         "phone": "0987-852-157",
-        "line_link": "TODO",      # 待填入 line://ti/p/~xxx
+        "line_link": "line://ti/p/~0987852157",
     },
 }
 
