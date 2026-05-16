@@ -37,15 +37,17 @@ LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 CONTACTS = {
     "塗料部門": {
         "name": "瑀墨塗料部門",
-        "line_id": "TODO",        # 填入 LINE ID
-        "phone": "TODO",          # 填入電話，例：04-2345-6789
-        "line_link": "TODO",      # 填入 line://ti/p/~xxx 或 https://line.me/R/ti/p/@xxx
+        "person": "葉采鑫 Ken｜Manager 經理",
+        "line_id": "TODO",        # 待填入 LINE ID
+        "phone": "0930-691-134",
+        "line_link": "TODO",      # 待填入 line://ti/p/~xxx
     },
     "工程部門": {
         "name": "瑀墨工程部門",
-        "line_id": "TODO",
-        "phone": "TODO",
-        "line_link": "TODO",
+        "person": "張紘瑀 Aaron｜Manager 經理",
+        "line_id": "TODO",        # 待填入 LINE ID
+        "phone": "0987-852-157",
+        "line_link": "TODO",      # 待填入 line://ti/p/~xxx
     },
 }
 
@@ -133,7 +135,8 @@ def _make_contact_flex(contact: dict) -> dict:
             "paddingAll": "20px",
             "contents": [
                 {"type": "text", "text": contact["name"], "color": "#C9A84C", "size": "xl", "weight": "bold"},
-                {"type": "text", "text": "瑀墨塗料有限公司", "color": "#888888", "size": "xs", "margin": "sm"},
+                {"type": "text", "text": contact.get("person", ""), "color": "#cccccc", "size": "sm", "margin": "sm"},
+                {"type": "text", "text": "瑀墨塗料有限公司", "color": "#666666", "size": "xs", "margin": "xs"},
             ],
         },
         "body": {
