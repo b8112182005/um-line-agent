@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 
 import anthropic
-from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID
+from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from push import get_display_name, push_message
 
 logger = logging.getLogger(__name__)
@@ -176,6 +176,27 @@ def _wants_human(text: str) -> bool:
     return any(k in text for k in _HUMAN_KEYWORDS)
 
 
+# === 部門分流 ===
+_ENG_KEYWORDS = [
+    "施工", "工程", "油漆工", "師傅", "刷牆", "刷漆",
+    "防水工程", "外牆工程", "壁癌處理", "拉皮", "驗收", "工班",
+]
+_PAINT_KEYWORDS = [
+    "備料", "訂貨", "批發", "加侖", "桶", "坪數", "配送",
+    "退料", "色卡", "品牌", "品項", "送貨", "報價",
+]
+
+
+def _resolve_staff_id(text: str, history: list[dict]) -> str:
+    """依對話內容判斷應通知哪位專人，預設塗料部門（葉采鑫）"""
+    full_text = text + " ".join(m["content"] for m in history[-6:])
+    eng_score = sum(1 for k in _ENG_KEYWORDS if k in full_text)
+    paint_score = sum(1 for k in _PAINT_KEYWORDS if k in full_text)
+    if eng_score > paint_score:
+        return LINE_ENGINEER_USER_ID or LINE_BOSS_USER_ID
+    return LINE_BOSS_USER_ID
+
+
 # === 備料需求偵測（依 AI 回覆內容判斷）===
 def _is_demand_collected(reply: str) -> bool:
     return "記錄下來" in reply or "專人會盡快跟您聯繫" in reply
@@ -220,13 +241,14 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         _ai_turn_counts[user_id] = 0
         display_name = await get_display_name(user_id)
         history = _get_history(user_id)
+        staff_id = _resolve_staff_id(text, history)
         context_lines = [
             f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
             for m in history[-4:]
         ]
         context = "\n".join(context_lines) + f"\n客人：{text}" if context_lines else f"客人：{text}"
         await push_message(
-            LINE_BOSS_USER_ID,
+            staff_id,
             f"🔔 客人請求人工客服\n客人：{display_name}\n─────────────\n{context}",
         )
         return _HUMAN_TRANSFER_REPLY
@@ -254,16 +276,17 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         # 記入對話歷史
         _add_to_history(user_id, text, reply)
 
-        # 備料需求偵測：AI 判斷已收集到需求時推播給業務
+        # 備料需求偵測：AI 判斷已收集到需求時推播給對應業務
         if _is_demand_collected(reply):
             display_name = await get_display_name(user_id)
             history_now = _get_history(user_id)
+            staff_id = _resolve_staff_id(text, history_now)
             context = "\n".join(
                 f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
                 for m in history_now[-6:]
             )
             await push_message(
-                LINE_BOSS_USER_ID,
+                staff_id,
                 f"📦 新備料需求\n客人：{display_name}\n─────────────\n{context}",
             )
 
