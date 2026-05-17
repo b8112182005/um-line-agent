@@ -8,24 +8,11 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
-from customer import MENU_RESPONSES
-from intent import parse_intent
-from chat import humanize
-from customer import handle_customer
-from query_wms import get_stock, get_low_stock, get_recent_transactions, get_orders_summary
-from query_money import (
-    get_monthly_summary,
-    get_expense_by_category,
-    get_recent_expenses,
-    get_ar_ap_status,
-)
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
+from customer import MENU_RESPONSES, handle_customer
 from scheduler import setup_scheduler
-from user_db import (
-    init_db, get_role, get_latest_pending, approve_user, block_user,
-    list_approved, list_pending, list_all_users, set_note, remove_user, find_user_by_name,
-)
-from push import push_message, leave_group
+from user_db import init_db
+from push import leave_group
 
 import httpx
 
@@ -55,33 +42,10 @@ CONTACTS = {
     },
 }
 
-# 統一選單觸發文字（塗料/工程走 Flex 名片，產品/FAQ 走固定文字）
-UNIVERSAL_KEYWORDS = {"塗料部門", "工程部門", "產品介紹", "常見問題"}
-
-HELP_TEXT = (
-    "我可以幫你查以下資訊：\n"
-    "📦 庫存查詢 —「虹牌庫存」\n"
-    "⚠️ 低庫存警報 —「缺貨」\n"
-    "📋 進出貨紀錄 —「最近進出貨」\n"
-    "📊 月收支摘要 —「3月收支」\n"
-    "💸 支出明細 —「最近支出」\n"
-    "📈 支出分類 —「3月支出分類」\n"
-    "💰 帳款狀態 —「應收應付」\n"
-    "\n👥 白名單管理：\n"
-    "「名單」— 查看已開通用戶\n"
-    "「待審」— 查看待審核用戶\n"
-    "「通過」— 開通最近一位待審核用戶\n"
-    "「不要」— 拒絕最近一位待審核用戶\n"
-    "「備註 暱稱 內容」— 加備註（如：備註 王小明 油漆包商）\n"
-    "「移除 暱稱」— 移除用戶\n"
-    "「查 暱稱」— 搜尋用戶\n"
-    "「全部」— 列出所有用戶（含角色）"
-)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db(LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
+    init_db()
     scheduler = setup_scheduler()
     scheduler.start()
     logger.info("排程器已啟動")
@@ -449,15 +413,6 @@ async def callback(request: Request):
         if text in MENU_RESPONSES and text in ("產品介紹", "常見問題"):
             await reply_line(reply_token, MENU_RESPONSES[text])
             continue
-
-        role = get_role(user_id)
-
-        # boss/engineer 保留白名單管理指令，其餘一律走小墨
-        if role in ("boss", "engineer"):
-            admin_response = await handle_boss_admin(text)
-            if admin_response:
-                await reply_line(reply_token, admin_response)
-                continue
 
         response = await handle_customer(text, user_id)
         await reply_line(reply_token, response)

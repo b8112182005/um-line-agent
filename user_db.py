@@ -14,7 +14,7 @@ def _conn():
     return sqlite3.connect(DB_PATH)
 
 
-def init_db(boss_user_id: str, engineer_user_id: str = ""):
+def init_db():
     """建表 + 確保工程師與老闆 ID 存在"""
     with _conn() as conn:
         conn.execute("""
@@ -39,23 +39,7 @@ def init_db(boss_user_id: str, engineer_user_id: str = ""):
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
-        # 工程師（最高權限）
-        if engineer_user_id:
-            conn.execute(
-                "INSERT OR IGNORE INTO users (line_user_id, display_name, role) VALUES (?, ?, ?)",
-                (engineer_user_id, "工程師", "engineer"),
-            )
-            # 若已存在但角色不對，更新
-            conn.execute(
-                "UPDATE users SET role = 'engineer' WHERE line_user_id = ? AND role != 'engineer'",
-                (engineer_user_id,),
-            )
-        # 老闆
-        if boss_user_id and boss_user_id != engineer_user_id:
-            conn.execute(
-                "INSERT OR IGNORE INTO users (line_user_id, display_name, role) VALUES (?, ?, ?)",
-                (boss_user_id, "老闆", "boss"),
-            )
+
 
         # === 種子資料（確保每次啟動都在）===
         seed_users = [
