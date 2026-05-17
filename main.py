@@ -452,18 +452,15 @@ async def callback(request: Request):
 
         role = get_role(user_id)
 
+        # boss/engineer 保留白名單管理指令，其餘一律走小墨
         if role in ("boss", "engineer"):
             admin_response = await handle_boss_admin(text)
             if admin_response:
                 await reply_line(reply_token, admin_response)
-            else:
-                response = await handle_query(text)
-                await reply_line(reply_token, response)
+                continue
 
-        else:
-            # 所有其他用戶直接進客服模式（小墨）
-            response = await handle_customer(text, user_id)
-            await reply_line(reply_token, response)
+        response = await handle_customer(text, user_id)
+        await reply_line(reply_token, response)
 
     return {"status": "ok"}
 
