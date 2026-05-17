@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 
 import anthropic
-from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
+from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID
 from push import get_display_name, push_message
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ def _resolve_staff_id(text: str, history: list[dict]) -> str:
     eng_score = sum(1 for k in _ENG_KEYWORDS if k in full_text)
     paint_score = sum(1 for k in _PAINT_KEYWORDS if k in full_text)
     if eng_score > paint_score:
-        return LINE_ENGINEER_USER_ID or LINE_BOSS_USER_ID
+        return LINE_ENG_BOSS_USER_ID or LINE_BOSS_USER_ID
     return LINE_BOSS_USER_ID
 
 

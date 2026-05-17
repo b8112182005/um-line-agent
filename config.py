@@ -6,8 +6,9 @@ load_dotenv()
 # === LINE Bot ===
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-LINE_BOSS_USER_ID = os.getenv("LINE_BOSS_USER_ID", "")
-LINE_ENGINEER_USER_ID = os.getenv("LINE_ENGINEER_USER_ID", "")
+LINE_BOSS_USER_ID = os.getenv("LINE_BOSS_USER_ID", "")         # 葉采鑫（塗料部門）
+LINE_ENG_BOSS_USER_ID = os.getenv("LINE_ENG_BOSS_USER_ID", "")  # 張紘瑀（工程部門）
+LINE_ENGINEER_USER_ID = os.getenv("LINE_ENGINEER_USER_ID", "")  # 開發者
 
 # === 白名單（逗號分隔的 LINE User ID）===
 BOSS_USER_IDS = [
