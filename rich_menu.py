@@ -33,7 +33,7 @@ UNIFIED_MENU = {
         {"bounds": {"x": 1250, "y": 562, "width": 1250, "height": 562},
          "action": {"type": "message", "text": "常見問題"}},
         {"bounds": {"x": 0, "y": 1124, "width": 1250, "height": 562},
-         "action": {"type": "uri", "uri": WEBSITE_URL + "/portfolio", "label": "作品集"}},
+         "action": {"type": "uri", "uri": WEBSITE_URL, "label": "作品集"}},
         {"bounds": {"x": 1250, "y": 1124, "width": 1250, "height": 562},
          "action": {"type": "uri", "uri": WEBSITE_URL + "/order", "label": "線上備料"}},
     ],
