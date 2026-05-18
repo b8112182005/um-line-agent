@@ -406,6 +406,11 @@ async def callback(request: Request):
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
 
+        # 隱藏指令：查自己的 User ID
+        if text == "查我ID":
+            await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
+            continue
+
         # 統一選單按鈕：所有用戶皆可使用，不受角色限制
         if text in CONTACTS:
             await reply_flex(reply_token, _make_contact_flex(CONTACTS[text]))
