@@ -281,13 +281,15 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
             display_name = await get_display_name(user_id)
             history_now = _get_history(user_id)
             staff_id = _resolve_staff_id(text, history_now)
-            context = "\n".join(
-                f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
-                for m in history_now[-6:]
-            )
+            # 擷取小墨回覆中已整理好的結構化資訊
+            summary = reply
+            for marker in ["我已經幫您記錄下來：", "已經幫您記錄下來：", "幫您記錄下來了："]:
+                if marker in reply:
+                    summary = reply[reply.index(marker) + len(marker):].strip()
+                    break
             await push_message(
                 staff_id,
-                f"📦 新備料需求\n客人：{display_name}\n─────────────\n{context}",
+                f"📦 新備料需求\n客人：{display_name}\n─────────────\n{summary}",
             )
 
         # 連續 AI 回答 N 輪後主動提示可找真人
