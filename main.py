@@ -8,8 +8,8 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
-from customer import MENU_RESPONSES, handle_customer
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID
+from customer import MENU_RESPONSES, handle_customer, handle_staff
 from scheduler import setup_scheduler
 from user_db import init_db
 from push import leave_group
@@ -419,7 +419,10 @@ async def callback(request: Request):
             await reply_line(reply_token, MENU_RESPONSES[text])
             continue
 
-        response = await handle_customer(text, user_id)
+        if user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID):
+            response = await handle_staff(text, user_id)
+        else:
+            response = await handle_customer(text, user_id)
         await reply_line(reply_token, response)
 
     return {"status": "ok"}

@@ -311,3 +311,48 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
     except Exception as e:
         logger.error(f"客服 AI 回覆失敗：{e}")
         return "不好意思，系統忙碌中，請稍後再試或直接撥打電話聯繫我們。"
+
+
+_STAFF_SYSTEM_PROMPT = """你是「小墨」，瑀墨塗料有限公司的內部 AI 助理。
+現在對話的是公司內部同仁（塗料或工程部門主管）。
+
+語氣：輕鬆直接，像同事聊天，不需要客服式的拘謹。用繁體中文回覆。
+
+你能做的事：
+1. 回答關於 LINE Bot 系統的問題（功能、設定、備料通知流程）
+2. 解釋客戶對話的處理方式
+3. 一般塗料業務問題的討論
+
+原則：
+- 直接回答，不用問一堆收集表單的問題
+- 不用說「我幫您轉給專人」或「找真人」之類的話
+- 不要用 markdown 格式，LINE 不支援
+- 回覆控制在 200 字以內"""
+
+_staff_conversations: dict[str, list[dict]] = defaultdict(list)
+
+
+async def handle_staff(text: str, user_id: str) -> str:
+    """內部同仁模式：輕鬆對話，無額度限制"""
+    if not ANTHROPIC_API_KEY:
+        return "系統維護中，請稍後再試。"
+    try:
+        history = _staff_conversations[user_id][-MAX_HISTORY * 2:]
+        messages = history + [{"role": "user", "content": text}]
+
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        message = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            system=_STAFF_SYSTEM_PROMPT,
+            messages=messages,
+        )
+        reply = message.content[0].text.strip()
+
+        _staff_conversations[user_id].append({"role": "user", "content": text})
+        _staff_conversations[user_id].append({"role": "assistant", "content": reply})
+
+        return reply
+    except Exception as e:
+        logger.error(f"內部模式 AI 回覆失敗：{e}")
+        return "系統忙碌中，請稍後再試。"
