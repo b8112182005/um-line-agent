@@ -10,7 +10,6 @@ from fastapi.staticfiles import StaticFiles
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from customer import MENU_RESPONSES, handle_customer, handle_staff
-from scheduler import setup_scheduler
 from user_db import init_db
 from push import leave_group
 
@@ -46,11 +45,7 @@ CONTACTS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    scheduler = setup_scheduler()
-    scheduler.start()
-    logger.info("排程器已啟動")
     yield
-    scheduler.shutdown()
 
 
 app = FastAPI(title="瑀墨助理", lifespan=lifespan)
