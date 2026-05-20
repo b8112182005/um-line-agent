@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from customer import MENU_RESPONSES, handle_customer, handle_staff
 from scheduler import setup_scheduler
 from user_db import init_db
@@ -197,167 +197,6 @@ async def reply_line(reply_token: str, text: str):
             logger.error(f"LINE reply 失敗：{resp.status_code} {resp.text}")
 
 
-async def handle_boss_admin(text: str) -> str | None:
-    """處理老闆的白名單管理指令，非管理指令回傳 None"""
-    if text == "通過":
-        pending = get_latest_pending()
-        if not pending:
-            return "目前沒有待審核的用戶"
-        approve_user(pending["user_id"])
-        # 通知被開通的用戶
-        await push_message(
-            pending["user_id"],
-            "你好～已開通客服權限，有什麼可以幫你的嗎？😊"
-        )
-        return f"已開通 {pending['display_name']} 的客服權限 ✓"
-
-    if text == "不要":
-        pending = get_latest_pending()
-        if not pending:
-            return "目前沒有待審核的用戶"
-        block_user(pending["user_id"])
-        return f"已拒絕 {pending['display_name']} ✓"
-
-    if text == "名單":
-        users = list_approved()
-        if not users:
-            return "目前沒有已開通的用戶"
-        lines = ["👥 已開通用戶："]
-        for u in users:
-            note_str = f"｜{u['note']}" if u['note'] else ""
-            lines.append(f"  {u['display_name']}{note_str}")
-        return "\n".join(lines)
-
-    if text == "待審":
-        users = list_pending()
-        if not users:
-            return "目前沒有待審核的用戶"
-        lines = ["⏳ 待審核用戶："]
-        for u in users:
-            note_str = f"｜{u['note']}" if u['note'] else ""
-            lines.append(f"  {u['display_name']}{note_str}")
-        return "\n".join(lines)
-
-    # 備註 暱稱 內容
-    if text.startswith("備註 "):
-        parts = text[3:].strip().split(" ", 1)
-        if len(parts) < 2:
-            return "格式：備註 暱稱 內容\n例如：備註 王小明 油漆包商"
-        name, note = parts[0], parts[1]
-        users = find_user_by_name(name)
-        if not users:
-            return f"找不到暱稱含「{name}」的用戶"
-        if len(users) > 1:
-            lines = [f"找到 {len(users)} 位，請用更精確的名字："]
-            for u in users:
-                lines.append(f"  {u['display_name']}（{u['role']}）")
-            return "\n".join(lines)
-        target = users[0]
-        set_note(target["user_id"], note)
-        return f"已為 {target['display_name']} 加備註：{note} ✓"
-
-    # 移除 暱稱
-    if text.startswith("移除 "):
-        name = text[3:].strip()
-        if not name:
-            return "格式：移除 暱稱\n例如：移除 王小明"
-        users = find_user_by_name(name)
-        if not users:
-            return f"找不到暱稱含「{name}」的用戶"
-        if len(users) > 1:
-            lines = [f"找到 {len(users)} 位，請用更精確的名字："]
-            for u in users:
-                lines.append(f"  {u['display_name']}（{u['role']}）")
-            return "\n".join(lines)
-        target = users[0]
-        if remove_user(target["user_id"]):
-            return f"已移除 {target['display_name']} ✓"
-        return f"無法移除 {target['display_name']}（boss/engineer 不可移除）"
-
-    if text == "全部":
-        users = list_all_users()
-        if not users:
-            return "目前沒有任何用戶"
-        role_label = {"engineer": "工程師", "boss": "老闆", "approved": "已開通", "pending": "待審核", "blocked": "已拒絕"}
-        lines = [f"📋 全部用戶（{len(users)} 位）："]
-        for u in users:
-            label = role_label.get(u["role"], u["role"])
-            note_str = f"｜{u['note']}" if u['note'] else ""
-            lines.append(f"  [{label}] {u['display_name']}{note_str}")
-        return "\n".join(lines)
-
-    # 查 暱稱
-    if text.startswith("查 "):
-        name = text[2:].strip()
-        if not name:
-            return "格式：查 暱稱"
-        users = find_user_by_name(name)
-        if not users:
-            return f"找不到暱稱含「{name}」的用戶"
-        lines = [f"搜尋結果（{len(users)} 位）："]
-        for u in users:
-            note_str = f"｜{u['note']}" if u['note'] else ""
-            lines.append(f"  {u['display_name']}（{u['role']}）{note_str}")
-        return "\n".join(lines)
-
-    return None
-
-
-async def handle_query(text: str) -> str:
-    """解析意圖 → 查資料 → Claude 口語化回覆"""
-    parsed = await parse_intent(text)
-    intent = parsed.get("intent", "unknown")
-    now = datetime.now()
-
-    logger.info(f"意圖解析結果：{parsed}")
-
-    try:
-        raw_data = None
-
-        if intent == "search_product":
-            keyword = parsed.get("keyword", "")
-            if not keyword:
-                return "請告訴我要查哪個品項？例如：「虹牌庫存」"
-            raw_data = await get_stock(keyword)
-
-        elif intent == "low_stock":
-            raw_data = await get_low_stock()
-
-        elif intent == "transactions":
-            days = int(parsed.get("days", 7))
-            raw_data = await get_recent_transactions(days)
-
-        elif intent == "orders":
-            raw_data = await get_orders_summary()
-
-        elif intent == "pnl":
-            month_str = parsed.get("month", now.strftime("%Y-%m"))
-            parts = month_str.split("-")
-            year, month = int(parts[0]), int(parts[1])
-            raw_data = await get_monthly_summary(year, month)
-
-        elif intent == "expense_detail":
-            raw_data = await get_recent_expenses()
-
-        elif intent == "expense_category":
-            month_str = parsed.get("month", now.strftime("%Y-%m"))
-            parts = month_str.split("-")
-            year, month = int(parts[0]), int(parts[1])
-            raw_data = await get_expense_by_category(year, month)
-
-        elif intent == "dashboard":
-            raw_data = await get_ar_ap_status()
-
-        else:
-            return HELP_TEXT
-
-        return await humanize(text, raw_data)
-
-    except Exception as e:
-        logger.error(f"查詢失敗：{e}", exc_info=True)
-        return "系統忙碌中，請稍後再試"
-
-
 
 @app.post("/callback")
 async def callback(request: Request):
@@ -419,7 +258,7 @@ async def callback(request: Request):
             await reply_line(reply_token, MENU_RESPONSES[text])
             continue
 
-        if user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID):
+        if user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID):
             response = await handle_staff(text, user_id)
         else:
             response = await handle_customer(text, user_id)
