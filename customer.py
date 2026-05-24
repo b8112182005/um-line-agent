@@ -223,6 +223,9 @@ def _is_demand_collected(reply: str) -> bool:
 _ai_turn_counts: dict[str, int] = {}
 SUGGEST_HUMAN_AFTER = 3
 
+# === 非服務時間提示：每用戶每日只發一次 ===
+_off_hours_notified: dict[str, str] = {}  # {user_id: "YYYY-MM-DD"}
+
 
 # === Prompt injection ===
 _INJECTION_PATTERNS = [
@@ -259,15 +262,26 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         display_name = await get_display_name(user_id)
         history = _get_history(user_id)
         staff_id = _resolve_staff_id(text, history)
-        context_lines = [
-            f"{'客人' if m['role'] == 'user' else '小墨'}：{m['content']}"
-            for m in history[-4:]
-        ]
-        context = "\n".join(context_lines) + f"\n客人：{text}" if context_lines else f"客人：{text}"
-        await push_message(
-            staff_id,
-            f"🔔 客人請求人工客服\n客人：{display_name}\n─────────────\n{context}",
+        def _trim(s: str, n: int = 40) -> str:
+            return s[:n] + "..." if len(s) > n else s
+
+        last_user_msg = next(
+            (m["content"] for m in reversed(history) if m["role"] == "user"),
+            text,
         )
+        recent = history[-3:]
+        ctx_lines = [
+            f"{'客人' if m['role'] == 'user' else '小墨'}：{_trim(m['content'])}"
+            for m in recent
+        ]
+        ctx = "\n".join(ctx_lines) if ctx_lines else "（無歷史記錄）"
+        push_msg = (
+            f"🔔 客人求助，請回覆\n\n"
+            f"👤 {display_name}\n\n"
+            f"💬 客人說：\n「{_trim(last_user_msg, 60)}」\n\n"
+            f"── 對話記錄 ──\n{ctx}"
+        )
+        await push_message(staff_id, push_msg)
         return _HUMAN_TRANSFER_REPLY
 
     # 檢查每日上限
@@ -320,8 +334,10 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         if remaining <= 5:
             reply += f"\n\n（今日剩餘 {remaining} 則對話額度）"
 
-        # 非上班時間附注
-        if not _is_business_hours():
+        # 非上班時間附注（每用戶每日只出現一次）
+        today = time.strftime("%Y-%m-%d")
+        if not _is_business_hours() and _off_hours_notified.get(user_id) != today:
+            _off_hours_notified[user_id] = today
             reply += _OFF_HOURS_NOTE
 
         return reply
