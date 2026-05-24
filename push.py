@@ -28,6 +28,25 @@ async def push_message(to_user_id: str, text: str):
             logger.error(f"推播失敗：{resp.status_code} {resp.text}")
 
 
+async def push_flex(to_user_id: str, alt_text: str, flex_contents: dict):
+    """推播 Flex Message 給指定用戶"""
+    if not to_user_id:
+        logger.warning("push_flex: user_id 為空，跳過")
+        return
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    body = {
+        "to": to_user_id,
+        "messages": [{"type": "flex", "altText": alt_text, "contents": flex_contents}],
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(LINE_PUSH_URL, json=body, headers=headers)
+        if resp.status_code != 200:
+            logger.error(f"Flex 推播失敗：{resp.status_code} {resp.text}")
+
+
 async def get_group_name(group_id: str) -> str:
     """透過 LINE API 取得群組名稱"""
     headers = {

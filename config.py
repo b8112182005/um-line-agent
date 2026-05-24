@@ -27,3 +27,6 @@ API_PASSWORD = os.getenv("API_PASSWORD", "")
 
 # === Claude API ===
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# === OpenAI API（語音轉文字 Whisper）===
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

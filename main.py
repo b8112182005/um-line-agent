@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
-from customer import MENU_RESPONSES, handle_customer, handle_staff
+from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
 from user_db import init_db
 from push import leave_group
 
@@ -231,12 +231,36 @@ async def callback(request: Request):
         # === 一般訊息（僅限私訊）===
         if event_type != "message":
             continue
-        if event["message"].get("type") != "text":
+
+        msg_type = event["message"].get("type")
+        reply_token = event["replyToken"]
+        user_id = source.get("userId", "unknown")
+
+        # 圖片 → Claude Vision 分析
+        if msg_type == "image":
+            message_id = event["message"]["id"]
+            response = await handle_image(message_id, user_id)
+            await reply_line(reply_token, response)
+            continue
+
+        # 語音 → Whisper 轉文字後走客服流程
+        if msg_type == "audio":
+            message_id = event["message"]["id"]
+            response = await handle_audio(message_id, user_id)
+            await reply_line(reply_token, response)
+            continue
+
+        # 影片/檔案 → 引導改打字
+        if msg_type in ("video", "file"):
+            await reply_line(reply_token, "您好，我目前無法處理這類訊息，方便打字說明一下需求嗎？")
+            continue
+
+        # 非文字（貼圖等）→ 忽略
+        if msg_type != "text":
             continue
 
         text = event["message"]["text"].strip()
-        reply_token = event["replyToken"]
-        user_id = source.get("userId", "unknown")
+
 
         logger.info(f"收到訊息：「{text}」 來自：{user_id}")
 
