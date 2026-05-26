@@ -39,6 +39,15 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS customer_demands (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                line_user_id TEXT NOT NULL,
+                display_name TEXT DEFAULT '',
+                summary      TEXT DEFAULT '',
+                created_at   TEXT DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
 
 
         # === 種子資料（確保每次啟動都在）===
@@ -228,3 +237,32 @@ def list_allowed_groups() -> list[dict]:
             "SELECT group_id, group_name, created_at FROM groups WHERE status = 'allowed' ORDER BY created_at"
         ).fetchall()
     return [{"group_id": r[0], "group_name": r[1], "created_at": r[2]} for r in rows]
+
+
+# === 客戶需求記錄 ===
+
+def save_demand(line_user_id: str, display_name: str, summary: str):
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO customer_demands (line_user_id, display_name, summary) VALUES (?,?,?)",
+            (line_user_id, display_name, summary),
+        )
+        conn.commit()
+
+
+def get_demands_by_user(line_user_id: str, limit: int = 3) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT summary, created_at FROM customer_demands WHERE line_user_id=? ORDER BY id DESC LIMIT ?",
+            (line_user_id, limit),
+        ).fetchall()
+    return [{"summary": r[0], "created_at": r[1]} for r in rows]
+
+
+def get_recent_demands(limit: int = 10) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT display_name, summary, created_at FROM customer_demands ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"display_name": r[0], "summary": r[1], "created_at": r[2]} for r in rows]

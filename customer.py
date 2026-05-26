@@ -10,6 +10,7 @@ import anthropic
 import httpx
 from config import ANTHROPIC_API_KEY, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_CHANNEL_ACCESS_TOKEN, OPENAI_API_KEY
 from push import get_display_name, push_message, push_flex
+from user_db import save_demand, get_demands_by_user, get_recent_demands
 
 logger = logging.getLogger(__name__)
 
@@ -397,11 +398,19 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
         history = _get_history(user_id)
         messages = history + [{"role": "user", "content": text}]
 
+        past = get_demands_by_user(user_id, limit=3)
+        if past:
+            lines = [f"- {d['created_at'][:10]}：{d['summary'][:80]}" for d in past]
+            returning_ctx = "此客人曾有以下備料記錄：\n" + "\n".join(lines) + "\n可自然帶入（如：「上次您訂的...」），不需要每句都提。\n\n"
+        else:
+            returning_ctx = ""
+        dynamic_system = returning_ctx + CUSTOMER_SYSTEM_PROMPT
+
         client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         message = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=500,
-            system=CUSTOMER_SYSTEM_PROMPT,
+            system=dynamic_system,
             messages=messages,
         )
         reply = message.content[0].text.strip()
@@ -440,6 +449,7 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
                 },
             }
             await push_flex(staff_id, f"備料需求：{display_name}", demand_flex)
+            save_demand(user_id, display_name, summary)
 
         # 連續 AI 回答 N 輪後主動提示可找真人
         _ai_turn_counts[user_id] = _ai_turn_counts.get(user_id, 0) + 1
@@ -483,10 +493,20 @@ _STAFF_SYSTEM_PROMPT = """你是「小墨」，瑀墨塗料有限公司的內部
 _staff_conversations: dict[str, list[dict]] = defaultdict(list)
 
 
+_STATS_KEYWORDS = ["統計", "客戶", "查客", "最近需求", "客人清單", "客人記錄"]
+
+
 async def handle_staff(text: str, user_id: str) -> str:
     """內部同仁模式：輕鬆對話，無額度限制"""
     if not ANTHROPIC_API_KEY:
         return "系統維護中，請稍後再試。"
+
+    if any(k in text for k in _STATS_KEYWORDS):
+        demands = get_recent_demands(limit=10)
+        if not demands:
+            return "目前還沒有備料需求記錄。"
+        lines = [f"{d['created_at'][:10]} {d['display_name']}：{d['summary'][:60]}" for d in demands]
+        text = "最近備料需求記錄：\n" + "\n".join(lines) + "\n\n請用繁體中文整理成簡潔摘要回覆同仁。"
     try:
         history = _staff_conversations[user_id][-MAX_HISTORY * 2:]
         messages = history + [{"role": "user", "content": text}]
