@@ -286,6 +286,12 @@ async def callback(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/intro")
+async def intro():
+    from fastapi.responses import FileResponse
+    return FileResponse("assets/intro.html", media_type="text/html")
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
