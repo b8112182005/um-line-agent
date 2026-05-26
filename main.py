@@ -288,8 +288,103 @@ async def callback(request: Request):
 
 @app.get("/intro")
 async def intro():
-    from fastapi.responses import FileResponse
-    return FileResponse("assets/intro.html", media_type="text/html")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=_INTRO_HTML)
+
+
+_INTRO_HTML = """<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>瑀墨 LINE 客服小墨</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif; background: #f7f7f5; color: #222; }
+header { background: #1a1a2e; color: #fff; padding: 36px 40px 32px; text-align: center; }
+header .logo { font-size: 48px; margin-bottom: 10px; }
+header h1 { font-size: 26px; font-weight: 700; color: #C9A84C; }
+header p  { font-size: 15px; color: #aaa; margin-top: 6px; }
+.container { max-width: 860px; margin: 0 auto; padding: 40px 24px 60px; }
+.section { margin-bottom: 36px; }
+.section-label { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #888; margin-bottom: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+@media(max-width:600px){ .grid-3,.grid-2 { grid-template-columns: 1fr 1fr; } }
+@media(max-width:400px){ .grid-3,.grid-2 { grid-template-columns: 1fr; } }
+.card { background: #fff; border-radius: 14px; padding: 20px 18px; border: 1.5px solid #eee; }
+.card .icon { font-size: 30px; margin-bottom: 10px; }
+.card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.card p  { font-size: 13px; color: #666; line-height: 1.7; }
+.card.highlight { border-color: #C9A84C; background: #fffdf5; }
+.card.highlight h3 { color: #886600; }
+.flow { background: #fff; border-radius: 14px; padding: 24px; border: 1.5px solid #eee; }
+.flow-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.flow-row:last-child { margin-bottom: 0; }
+.bubble { border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; }
+.b-green { background: #e8fdf0; color: #1a6030; border: 1.5px solid #06C755; }
+.b-blue  { background: #e6f0f8; color: #1a3a5c; border: 1.5px solid #2B5C8A; }
+.b-gold  { background: #fff8e0; color: #886600; border: 1.5px solid #C9A84C; }
+.b-gray  { background: #f5f5f5; color: #666;    border: 1.5px solid #ddd; }
+.arr { color: #bbb; font-size: 18px; flex-shrink: 0; }
+.flow-note { font-size: 12px; color: #999; }
+footer { text-align: center; font-size: 12px; color: #ccc; padding-bottom: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🤖</div>
+  <h1>瑀墨 LINE 客服「小墨」</h1>
+  <p>24 小時自動接待客人，重要需求立即通知專人</p>
+</header>
+<div class="container">
+  <div class="section">
+    <div class="section-label">客人可以做什麼</div>
+    <div class="grid-3">
+      <div class="card"><div class="icon">💬</div><h3>自由提問</h3><p>問塗料選擇、坪數估算、服務流程，小墨直接回答</p></div>
+      <div class="card"><div class="icon">📦</div><h3>備料下單</h3><p>說明品項、地址、日期，小墨收集完整後通知葉經理</p></div>
+      <div class="card"><div class="icon">🖼️</div><h3>傳照片詢問</h3><p>傳牆面照片，小墨自動判斷壁癌、剝落等問題並給建議</p></div>
+      <div class="card"><div class="icon">💼</div><h3>查看部門名片</h3><p>點選塗料或工程部門，直接看到聯絡資訊與 LINE 名片</p></div>
+      <div class="card"><div class="icon">🔧</div><h3>詢問工程服務</h3><p>施工、防水、壁癌處理等需求，自動分流通知 Aaron</p></div>
+      <div class="card highlight"><div class="icon">🙋</div><h3>要求轉真人</h3><p>說「找真人」「叫老闆」等，立即推播通知對應經理</p></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-label">需求如何分流通知</div>
+    <div class="flow">
+      <div class="flow-row"><span class="bubble b-green">客人說要備料 / 叫料</span><span class="arr">→</span><span class="bubble b-gold">📲 通知 葉采鑫 Ken（塗料部門）</span></div>
+      <div class="flow-row"><span class="bubble b-green">客人問施工 / 工程評估</span><span class="arr">→</span><span class="bubble b-blue">📲 通知 張紘瑀 Aaron（工程部門）</span></div>
+      <div class="flow-row"><span class="bubble b-green">先問工程、後來說要自己買料</span><span class="arr">→</span><span class="bubble b-gold">📲 通知 葉采鑫 Ken（以最近訊息為準）</span></div>
+      <div class="flow-row"><span class="flow-note">※ 備料需求收齊（含電話）才推播，確保通知內容完整、不重複</span></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-label">老闆收到的通知樣式</div>
+    <div class="grid-2">
+      <div class="card highlight"><div class="icon">🔔</div><h3>客人求助卡（金色）</h3><p>客人說「找真人」「有人嗎」時發送<br><br>包含：客人名稱、最後一句話、近期對話記錄</p></div>
+      <div class="card" style="border-color:#2B5C8A;background:#f5f9fd;"><div class="icon">📦</div><h3 style="color:#2B5C8A;">備料需求卡（藍色）</h3><p>備料資訊收集完整後發送<br><br>包含：客人名稱、品項地址日期電話等完整清單</p></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-label">熟客記憶</div>
+    <div class="flow">
+      <div class="flow-row"><span class="bubble b-gray">第一次來 → 照常服務</span><span class="arr">→</span><span class="bubble b-gray">備料記錄存檔</span></div>
+      <div class="flow-row"><span class="bubble b-green">下次再來</span><span class="arr">→</span><span class="bubble b-gold">小墨自動帶入「上次您訂的…」讓客人感受到被記住</span></div>
+      <div class="flow-row"><span class="flow-note">※ 記錄永久保存，重新開機也不會消失</span></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-label">老闆直接問小墨（私訊）</div>
+    <div class="grid-3">
+      <div class="card"><div class="icon">📊</div><h3>客戶統計</h3><p>輸入「最近需求」或「客戶統計」，看近期備料記錄彙整</p></div>
+      <div class="card"><div class="icon">🏠</div><h3>業務問題</h3><p>直接問塗料、報價、流程等，小墨用輕鬆同事語氣回答</p></div>
+      <div class="card"><div class="icon">🔍</div><h3>查我ID</h3><p>輸入「查我ID」，取得自己的 LINE User ID</p></div>
+    </div>
+  </div>
+</div>
+<footer>瑀墨塗料有限公司 · LINE 客服小墨</footer>
+</body>
+</html>"""
 
 
 @app.get("/health")
