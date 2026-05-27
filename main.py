@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
+# 內部人員臨時切換至客服測試模式（重啟後自動清除）
+_staff_test_mode: set[str] = set()
+
 # 塗料/工程部門聯絡資訊（等老闆給 ID 後填入）
 _BASE_URL = "https://um-line-agent-production.up.railway.app"
 CONTACTS = {
@@ -282,7 +285,18 @@ async def callback(request: Request):
             user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
             or role in ("boss", "engineer")
         )
-        if is_staff:
+
+        # 內部人員角色切換
+        if is_staff and text in ("測試模式", "切換客服", "客服測試"):
+            _staff_test_mode.add(user_id)
+            await reply_line(reply_token, "🧪 已切換至客服測試模式\n現在會以一般客人身分與小墨對話\n輸入「結束測試」可切換回內部人員模式")
+            continue
+        if is_staff and user_id in _staff_test_mode and text in ("結束測試", "切回來", "退出測試"):
+            _staff_test_mode.discard(user_id)
+            await reply_line(reply_token, "✅ 已切換回內部人員模式")
+            continue
+
+        if is_staff and user_id not in _staff_test_mode:
             response = await handle_staff(text, user_id)
         else:
             response = await handle_customer(text, user_id)
