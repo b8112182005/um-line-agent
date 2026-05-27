@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
-from user_db import init_db
+from user_db import init_db, get_role
 from push import leave_group
 
 import httpx
@@ -277,7 +277,12 @@ async def callback(request: Request):
             await reply_line(reply_token, MENU_RESPONSES[text])
             continue
 
-        if user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID):
+        role = get_role(user_id)
+        is_staff = (
+            user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
+            or role in ("boss", "engineer")
+        )
+        if is_staff:
             response = await handle_staff(text, user_id)
         else:
             response = await handle_customer(text, user_id)

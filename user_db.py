@@ -52,9 +52,10 @@ def init_db():
 
         # === 種子資料（確保每次啟動都在）===
         seed_users = [
-            ("Ub9da80369a8d8c161d59c08cf282d783", "張紘瑀", "boss", "葉老闆/瑀墨塗料"),
-            ("Ufbf785909fe2d05e8f0d2ee6784aa321", "悠悠", "approved", ""),
-            ("U7a8bc939ffce3a958dbc8d3cabb7fcc0", "林逸婕", "approved", ""),
+            ("Ub9da80369a8d8c161d59c08cf282d783", "張紘瑀",   "boss",     "葉老闆/瑀墨塗料"),
+            ("U75c9e5c51324a7867cbdba0f1ddc9a31", "工程師",   "engineer", "開發維護"),
+            ("Ufbf785909fe2d05e8f0d2ee6784aa321", "悠悠",     "approved", ""),
+            ("U7a8bc939ffce3a958dbc8d3cabb7fcc0", "林逸婕",   "approved", ""),
         ]
         for uid, name, role, note in seed_users:
             conn.execute(
