@@ -23,6 +23,15 @@
 LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID,
 LINE_ENGINEER_USER_ID（工程師最高權限）,
 WMS_API_URL, MONEY_API_URL, API_USERNAME, API_PASSWORD, ANTHROPIC_API_KEY
+ALLOW_UNSIGNED_WEBHOOK（僅本機開發；正式環境勿設，缺 secret 時一律拒絕）
+
+## 安全機制（customer.py / main.py）
+- 身份保護：`_is_identity_question` 在進 LLM 前硬攔模型探詢，回固定話術（不自報 Claude/Anthropic）
+- prompt injection：`_is_injection` 關鍵字攔截（客服模式）
+- 老闆通知冷卻：`_can_notify_staff`（10 分鐘）防「找真人」灌爆
+- 額度：每人每日 50 則，圖片/語音也納入計算
+- webhook：HMAC 簽章 fail-closed + 事件 timestamp 防重放
+- 記憶體：`_maybe_cleanup` 定期淘汰閒置狀態
 
 ## 白名單管理
 - SQLite users 表（user_db.py）取代環境變數 BOSS_USER_IDS
