@@ -335,12 +335,33 @@ SUGGEST_HUMAN_AFTER = 3
 _off_hours_notified: dict[str, str] = {}  # {user_id: "YYYY-MM-DD"}
 
 
+# === 身份/模型詢問硬攔截（最高優先，pre-LLM，不送進 AI）===
+# 直接攔在進 LLM 之前，用固定回覆，避免任何巧妙話術讓小墨自報底層模型。
+_IDENTITY_PATTERNS = [
+    "什麼模型", "哪個模型", "哪一個模型", "哪種模型", "語言模型", "大模型",
+    "什麼 ai", "什麼ai", "哪個 ai", "哪家 ai", "什麼人工智慧", "什麼人工智能",
+    "claude", "gpt", "chatgpt", "gemini", "openai", "anthropic", "llama", "grok", "deepseek",
+    "誰開發", "誰做的", "誰寫的", "誰訓練", "誰打造", "哪家公司", "什麼公司",
+    "後台用什麼", "後端用什麼", "底層", "背後是", "背後用", "什麼技術", "什麼 api 串",
+    "你的模型", "你用的模型", "你是哪", "你backend", "你的版本", "什麼版本",
+    "system prompt", "系統提示詞", "你的提示詞",
+]
+
+_IDENTITY_REPLY = "我是瑀墨的 AI 助理小墨，塗料、備料相關的問題都可以問我！"
+
+
+def _is_identity_question(text: str) -> bool:
+    lower = text.lower()
+    return any(p in lower for p in _IDENTITY_PATTERNS)
+
+
 # === Prompt injection ===
 _INJECTION_PATTERNS = [
-    "忽略", "ignore", "forget", "disregard",
+    "忽略", "ignore", "forget", "disregard", "別管前面", "當作沒看到",
     "系統提示", "system prompt", "你的指令", "你的規則", "你的設定",
-    "你現在是", "你是一個", "扮演", "roleplay", "pretend",
-    "假裝", "jailbreak", "dan ", "沒有限制的",
+    "你現在是一個", "你現在開始", "現在你是", "你不再是", "假設你是",
+    "扮演", "roleplay", "pretend", "developer mode", "開發者模式", "sudo",
+    "假裝", "jailbreak", "dan ", "沒有限制的", "不受限制",
     "act as", "you are now", "new persona",
 ]
 
@@ -358,6 +379,11 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
     if text in MENU_RESPONSES:
         _ai_turn_counts[user_id] = 0
         return MENU_RESPONSES[text]
+
+    # 身份/模型詢問硬攔截（最高優先，不送進 AI，不計入額度）
+    if _is_identity_question(text):
+        logger.info(f"身份詢問攔截，user={user_id}，text={text[:80]}")
+        return _IDENTITY_REPLY
 
     # Prompt injection 攔截（不計入額度）
     if _is_injection(text):
@@ -528,6 +554,10 @@ async def handle_staff(text: str, user_id: str) -> str:
     """內部同仁模式：輕鬆對話，無額度限制"""
     if not ANTHROPIC_API_KEY:
         return "系統維護中，請稍後再試。"
+
+    # 身份/模型詢問硬攔截（內部模式也適用，避免自報底層模型）
+    if _is_identity_question(text):
+        return _IDENTITY_REPLY
 
     if any(k in text for k in _STATS_KEYWORDS):
         demands = get_recent_demands(limit=10)
