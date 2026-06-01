@@ -1,5 +1,18 @@
 # CHANGELOG — um-line-agent
 
+## 2026-05-31 — 小墨身份保護 + 安全加固
+
+### 身份保護
+- customer.py — 客服與內部同仁兩組 system prompt 都加入身份原則：被問「你是什麼模型」、「是不是 Claude/GPT」、「誰開發的」等問題時，只回答「我是瑀墨的 AI 助理小墨」，不再透露底層模型、AI 公司或技術供應商
+- 新增 `_is_identity_question` 硬攔截：在送進 LLM 之前就攔下模型探詢，回固定話術，不依賴 AI 自律（客服＋內部模式皆套用）
+
+### 安全加固（防騷擾／防大量破壞）
+- 修正 `_INJECTION_PATTERNS` 過寬的「你是一個」「你現在是」誤判正常客戶，收斂為精準越獄話術並補上編碼／開發者模式繞過詞
+- 老闆通知冷卻＋去重（`_can_notify_staff`，10 分鐘）：防止「找真人」與備料推播被連續灌爆
+- 圖片（Vision）與語音（Whisper）納入每日額度，避免高成本 API 被無上限濫用
+- 簽章驗證改為 fail-closed：缺 `LINE_CHANNEL_SECRET` 時拒絕請求（本機可用 `ALLOW_UNSIGNED_WEBHOOK=1` 放行），並新增事件 timestamp 防重放（10 分鐘窗口）
+- 記憶體狀態定期清理（`_maybe_cleanup`）：淘汰閒置 24h 的對話/計數與過期日期記錄，避免 in-memory dict 緩慢洩漏
+
 ## 2026-04-04 — v1.1.0 身份分流 + AI 客服
 
 ### 新增

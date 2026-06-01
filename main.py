@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import base64
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -55,9 +56,18 @@ app = FastAPI(title="瑀墨助理", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 
+# 僅供本機開發在「明確設定」時放行未簽章請求；正式環境一律 fail-closed
+_ALLOW_UNSIGNED = os.getenv("ALLOW_UNSIGNED_WEBHOOK") == "1"
+
+
 def verify_signature(body: bytes, signature: str) -> bool:
     if not LINE_CHANNEL_SECRET:
-        return True
+        # fail-closed：缺 secret 時拒絕，避免有人偽造 webhook 冒充老闆 user_id
+        if _ALLOW_UNSIGNED:
+            logger.warning("LINE_CHANNEL_SECRET 未設定，但 ALLOW_UNSIGNED_WEBHOOK=1，放行（僅限本機開發）")
+            return True
+        logger.error("LINE_CHANNEL_SECRET 未設定，拒絕所有 webhook 請求（fail-closed）")
+        return False
     if not signature:
         logger.warning("缺少 X-Line-Signature header")
         return False
@@ -67,6 +77,18 @@ def verify_signature(body: bytes, signature: str) -> bool:
     if not ok:
         logger.warning(f"Signature 驗證失敗")
     return ok
+
+
+# 事件 timestamp 防重放：拒絕超過此秒數的舊事件（LINE 正常重送在數分鐘內）
+_EVENT_MAX_AGE_MS = 10 * 60 * 1000
+
+
+def _is_replay(event: dict) -> bool:
+    ts = event.get("timestamp")
+    if not isinstance(ts, (int, float)):
+        return False  # 沒有 timestamp 不阻擋，交由簽章把關
+    age_ms = datetime.now().timestamp() * 1000 - ts
+    return age_ms > _EVENT_MAX_AGE_MS
 
 
 def _make_contact_flex(contact: dict) -> dict:
@@ -209,6 +231,11 @@ async def callback(request: Request):
     events = data.get("events", [])
 
     for event in events:
+        # 防重放：丟棄過舊的事件（已通過簽章但可能是重送/重放）
+        if _is_replay(event):
+            logger.warning("丟棄過舊的事件（疑似重放）")
+            continue
+
         event_type = event.get("type")
         source = event.get("source", {})
         source_type = source.get("type", "")
