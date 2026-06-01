@@ -171,9 +171,12 @@ async def handle_audio(message_id: str, user_id: str = "anonymous") -> str:
         if resp.status_code != 200:
             return "收到您的語音！方便打字說明一下需求嗎？我幫您記錄給葉經理。"
 
-        # 即將呼叫 Whisper（高成本）→ 在此扣一次額度，無論轉錄成功、空白或失敗都計入，
-        # 避免有人用空白/無效語音不斷觸發轉錄卻不耗額度。成功時下游 handle_customer 不再重複扣。
-        _check_limit(user_id)
+        # 即將呼叫 Whisper（高成本）→ 在此扣一次額度並檢查上限，無論轉錄成功、空白或失敗都計入。
+        # 同時 honor 回傳值：並發語音請求可能都通過前面的 _remaining() peek，
+        # 必須在實際扣點時擋下超額者，避免繞過文字請求一樣的上限。
+        # 成功時下游 handle_customer(count_quota=False) 不再重複扣。
+        if not _check_limit(user_id):
+            return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
 
         audio_file = io.BytesIO(resp.content)
         audio_file.name = "audio.m4a"
