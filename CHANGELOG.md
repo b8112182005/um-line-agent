@@ -1,5 +1,15 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-01 — CI 自動化 + 修復過期測試
+
+### 新增
+- `.github/workflows/ci.yml`：每次 PR 與 push 到 master/staging 時，自動跑 `compileall` 語法檢查 + `test_bot.py`
+
+### 修復
+- `test_bot.py` 已與程式碼脫節，修正後可通過（29 項全綠）：
+  - `init_db()` 已改為無參數＋寫死種子資料，測試改為對齊現況（角色、note、群組以實際種子驗證，不再用過期的測試 ID）
+  - 移除 `test_admin_commands`：它測的 `main.handle_boss_admin` 在現行 codebase 不存在（白名單聊天管理指令尚未實作）
+
 ## 2026-05-31 — 小墨身份保護 + 安全加固
 
 ### 身份保護
