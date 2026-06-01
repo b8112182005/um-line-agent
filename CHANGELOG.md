@@ -4,7 +4,8 @@
 
 ### 文件
 - 校正 CLAUDE.md 與實際程式碼的落差（只改文件、不動程式）：
-  - 標記「老闆聊天即時查 WMS/UMmoney」尚未接線（`parse_intent` 未被呼叫；query 模組目前僅供定時推播）
+  - 標記「老闆聊天即時查 WMS/UMmoney」尚未接線（`parse_intent` 未被呼叫）
+  - 標記定時推播未啟動（`setup_scheduler()` 從未被呼叫，lifespan 只做 init_db）→ 整套 WMS/UMmoney 功能目前休眠（兩條送達管道都沒接）
   - 標記白名單聊天管理（通過/不要/名單/待審）與陌生人自動 pending 通知尚未實作
   - 身份分流改為對齊 main.py（內部人員走 handle_staff、其餘走 handle_customer）
   - 補上 LINE_ENG_BOSS_USER_ID、OPENAI_API_KEY 環境變數
