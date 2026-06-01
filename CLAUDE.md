@@ -18,6 +18,7 @@
 ## 身份分流
 - 白名單（BOSS_USER_IDS）→ 老闆模式：意圖解析 → 查 WMS/UMmoney → 口語化回覆
 - 非白名單 → 客服模式：AI 客服「小墨」+ 圖文選單固定回覆
+- 內部人員（boss/engineer）模式切換指令：「客服模式」切到客人視角體驗小墨、「內部模式」切回內部同仁、「目前模式」查目前狀態（記憶體記錄，重啟自動回內部模式）
 
 ## 環境變數
 LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID,
