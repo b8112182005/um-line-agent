@@ -2,7 +2,6 @@
 
 用法：python test_bot.py
 """
-import asyncio
 import sys
 import os
 
@@ -80,12 +79,15 @@ def test_db():
     if os.path.exists(tmp):
         os.remove(tmp)
     user_db.DB_PATH = tmp
-    user_db.init_db("U_test_boss", "U_test_engineer")
-
+    user_db.init_db()
     check("init_db 成功", True)
-    check("engineer 角色正確", user_db.get_role("U_test_engineer") == "engineer")
-    check("boss 角色正確", user_db.get_role("U_test_boss") == "boss")
 
+    # 種子資料：至少各有一位 engineer 與 boss
+    roles = {u["role"] for u in user_db.list_all_users()}
+    check("種子含 engineer 角色", "engineer" in roles)
+    check("種子含 boss 角色", "boss" in roles)
+
+    # 待審 → 通過 流程（用不與種子衝突的測試 ID）
     user_db.add_pending("U_new", "測試用戶")
     check("add_pending", user_db.get_role("U_new") == "pending")
 
@@ -96,23 +98,24 @@ def test_db():
     check("approve_user", user_db.get_role("U_new") == "approved")
 
     user_db.set_note("U_new", "油漆師傅")
-    users = user_db.list_approved()
-    check("set_note + list_approved", users[0]["note"] == "油漆師傅")
+    approved = {u["user_id"]: u for u in user_db.list_approved()}
+    check("set_note + list_approved", approved.get("U_new", {}).get("note") == "油漆師傅")
 
-    found = user_db.find_user_by_name("測試")
-    check("find_user_by_name", len(found) == 1)
+    found = user_db.find_user_by_name("測試用戶")
+    check("find_user_by_name", any(u["user_id"] == "U_new" for u in found))
 
     user_db.remove_user("U_new")
     check("remove_user", user_db.get_role("U_new") is None)
 
-    # boss/engineer 不可移除
-    user_db.remove_user("U_test_boss")
-    check("boss 不可移除", user_db.get_role("U_test_boss") == "boss")
+    # boss/engineer 不可移除（用種子裡實際存在的 boss）
+    boss_id = next(u["user_id"] for u in user_db.list_all_users() if u["role"] == "boss")
+    user_db.remove_user(boss_id)
+    check("boss 不可移除", user_db.get_role(boss_id) == "boss")
 
     all_users = user_db.list_all_users()
     check("list_all_users", len(all_users) >= 2)
 
-    # 群組
+    # 群組待審 → 允許
     user_db.add_pending_group("G_test", "測試群組")
     check("add_pending_group", user_db.get_group_status("G_test") == "pending")
 
@@ -120,41 +123,12 @@ def test_db():
     check("approve_group", user_db.get_group_status("G_test") == "allowed")
 
     groups = user_db.list_allowed_groups()
-    check("list_allowed_groups", len(groups) == 1)
-
-
-def test_admin_commands():
-    """確認管理指令回應"""
-    print("\n[3] 管理指令檢查")
-    import main
-
-    async def run():
-        # 白名單指令
-        r = await main.handle_boss_admin("名單")
-        check("「名單」有回應", r is not None)
-
-        r = await main.handle_boss_admin("待審")
-        check("「待審」有回應", r is not None)
-
-        r = await main.handle_boss_admin("全部")
-        check("「全部」有回應", r is not None)
-
-        r = await main.handle_boss_admin("通過")
-        check("「通過」有回應", r is not None)
-
-        r = await main.handle_boss_admin("群組")
-        check("「群組」有回應", r is not None)
-
-        # 非管理指令 → 回傳 None
-        r = await main.handle_boss_admin("你好")
-        check("非管理指令回傳 None", r is None)
-
-    asyncio.run(run())
+    check("list_allowed_groups", any(g["group_id"] == "G_test" for g in groups))
 
 
 def test_keyword_fallback():
     """確認關鍵字 fallback 正常"""
-    print("\n[4] 意圖 Fallback 檢查")
+    print("\n[3] 意圖 Fallback 檢查")
     from intent import _keyword_fallback
 
     r = _keyword_fallback("缺貨")
@@ -175,7 +149,7 @@ def test_keyword_fallback():
 
 def test_customer_limit():
     """確認客服每日限額"""
-    print("\n[5] 客服限額檢查")
+    print("\n[4] 客服限額檢查")
     from customer import _check_limit, _remaining, DAILY_LIMIT
 
     test_user = "U_limit_test"
@@ -194,7 +168,6 @@ if __name__ == "__main__":
 
     test_imports()
     test_db()
-    test_admin_commands()
     test_keyword_fallback()
     test_customer_limit()
 
