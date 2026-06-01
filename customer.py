@@ -570,8 +570,12 @@ async def handle_customer(text: str, user_id: str = "anonymous", count_quota: bo
                     ],
                 },
             }
-            # 需求一律持久化，不受通知冷卻影響（避免客人被告知「已記錄」卻掉單）
-            save_demand(user_id, display_name, summary)
+            # 需求一律持久化，不受通知冷卻影響（避免客人被告知「已記錄」卻掉單）。
+            # 存檔獨立 try：即使 DB 暫時鎖定/出錯，也不能讓推播通知與正常回覆被吞掉。
+            try:
+                save_demand(user_id, display_name, summary)
+            except Exception as e:
+                logger.error(f"備料需求存檔失敗（仍照常推播通知）user={user_id}：{e}")
             # 推播則用 demand 專屬冷卻去重，與「找真人」互不壓制
             if _can_notify_staff(user_id, "demand"):
                 await push_flex(staff_id, f"備料需求：{display_name}", demand_flex)
