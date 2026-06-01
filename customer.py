@@ -60,12 +60,15 @@ STAFF_NOTIFY_COOLDOWN = 600  # 同一用戶 10 分鐘內最多通知老闆一次
 _last_staff_notify: dict[str, float] = {}
 
 
-def _can_notify_staff(user_id: str) -> bool:
-    """回傳 True 代表可以推播給老闆；冷卻期內回傳 False（避免重複轟炸）"""
+def _can_notify_staff(user_id: str, kind: str = "human") -> bool:
+    """回傳 True 代表可以推播給老闆；冷卻期內回傳 False（避免重複轟炸）。
+    kind 區隔不同通知類型（human=找真人 / demand=備料需求），各自獨立冷卻、不互相壓制。
+    注意：此函式只節流「推播」，不應拿來決定資料是否要持久化（save_demand）。"""
+    key = f"{kind}:{user_id}"
     now = time.time()
-    if now - _last_staff_notify.get(user_id, 0.0) < STAFF_NOTIFY_COOLDOWN:
+    if now - _last_staff_notify.get(key, 0.0) < STAFF_NOTIFY_COOLDOWN:
         return False
-    _last_staff_notify[user_id] = now
+    _last_staff_notify[key] = now
     return True
 
 
@@ -94,7 +97,8 @@ def _maybe_cleanup():
         _conversations.pop(u, None)
         _staff_conversations.pop(u, None)
         _ai_turn_counts.pop(u, None)
-        _last_staff_notify.pop(u, None)
+        _last_staff_notify.pop(f"human:{u}", None)
+        _last_staff_notify.pop(f"demand:{u}", None)
         _last_seen.pop(u, None)
 
     # 非今日的額度／提示記錄一律清掉
@@ -154,8 +158,7 @@ async def handle_audio(message_id: str, user_id: str = "anonymous") -> str:
     """下載 LINE 語音，送 OpenAI Whisper 轉文字，再走正常客服流程"""
     if not OPENAI_API_KEY:
         return "語音功能暫未開放，方便打字說明一下需求嗎？"
-    # 語音轉錄會呼叫 Whisper（高成本）；額度用盡時不啟動轉錄。
-    # 不在此處計數，交由後續 handle_customer 統一扣一次額度，避免重複計算。
+    # 語音轉錄會呼叫 Whisper（高成本）。額度已用完時連轉錄都不啟動。
     if _remaining(user_id) <= 0:
         return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
     try:
@@ -167,6 +170,13 @@ async def handle_audio(message_id: str, user_id: str = "anonymous") -> str:
             )
         if resp.status_code != 200:
             return "收到您的語音！方便打字說明一下需求嗎？我幫您記錄給葉經理。"
+
+        # 即將呼叫 Whisper（高成本）→ 在此扣一次額度並檢查上限，無論轉錄成功、空白或失敗都計入。
+        # 同時 honor 回傳值：並發語音請求可能都通過前面的 _remaining() peek，
+        # 必須在實際扣點時擋下超額者，避免繞過文字請求一樣的上限。
+        # 成功時下游 handle_customer(count_quota=False) 不再重複扣。
+        if not _check_limit(user_id):
+            return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
 
         audio_file = io.BytesIO(resp.content)
         audio_file.name = "audio.m4a"
@@ -181,7 +191,7 @@ async def handle_audio(message_id: str, user_id: str = "anonymous") -> str:
             return "抱歉，語音不太清楚，方便再打字說明一下嗎？"
 
         logger.info(f"語音轉文字 user={user_id}：{text[:80]}")
-        reply = await handle_customer(text, user_id)
+        reply = await handle_customer(text, user_id, count_quota=False)
         prefix = f"（語音：「{text[:40]}{'...' if len(text) > 40 else ''}」）\n\n"
         return prefix + reply
     except Exception as e:
@@ -429,8 +439,9 @@ def _is_injection(text: str) -> bool:
     return any(p in lower for p in _INJECTION_PATTERNS)
 
 
-async def handle_customer(text: str, user_id: str = "anonymous") -> str:
-    """客服模式：觸發文字走固定回覆，其他走 Claude AI 對話（含記憶+限額）"""
+async def handle_customer(text: str, user_id: str = "anonymous", count_quota: bool = True) -> str:
+    """客服模式：觸發文字走固定回覆，其他走 Claude AI 對話（含記憶+限額）。
+    count_quota=False 用於語音流程：額度已在 handle_audio 扣過，避免重複計算。"""
     _touch(user_id)
     _maybe_cleanup()
 
@@ -492,14 +503,14 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
                 ],
             },
         }
-        if _can_notify_staff(user_id):
+        if _can_notify_staff(user_id, "human"):
             await push_flex(staff_id, f"客人求助：{display_name}", human_flex)
         else:
             logger.info(f"找真人推播冷卻中，略過重複通知 user={user_id}")
         return _HUMAN_TRANSFER_REPLY
 
-    # 檢查每日上限
-    if not _check_limit(user_id):
+    # 檢查每日上限（語音流程已先扣過，count_quota=False 時略過）
+    if count_quota and not _check_limit(user_id):
         return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
 
     if not ANTHROPIC_API_KEY:
@@ -559,11 +570,17 @@ async def handle_customer(text: str, user_id: str = "anonymous") -> str:
                     ],
                 },
             }
-            if _can_notify_staff(user_id):
-                await push_flex(staff_id, f"備料需求：{display_name}", demand_flex)
+            # 需求一律持久化，不受通知冷卻影響（避免客人被告知「已記錄」卻掉單）。
+            # 存檔獨立 try：即使 DB 暫時鎖定/出錯，也不能讓推播通知與正常回覆被吞掉。
+            try:
                 save_demand(user_id, display_name, summary)
+            except Exception as e:
+                logger.error(f"備料需求存檔失敗（仍照常推播通知）user={user_id}：{e}")
+            # 推播則用 demand 專屬冷卻去重，與「找真人」互不壓制
+            if _can_notify_staff(user_id, "demand"):
+                await push_flex(staff_id, f"備料需求：{display_name}", demand_flex)
             else:
-                logger.info(f"備料推播冷卻中，略過重複通知 user={user_id}")
+                logger.info(f"備料推播冷卻中，已保存需求但略過重複通知 user={user_id}")
 
         # 連續 AI 回答 N 輪後主動提示可找真人
         _ai_turn_counts[user_id] = _ai_turn_counts.get(user_id, 0) + 1
