@@ -121,6 +121,7 @@ async def handle_image(message_id: str, user_id: str = "anonymous") -> str:
     # 圖片分析會呼叫 Vision API（高成本），同樣納入每日額度
     if not _check_limit(user_id):
         return f"不好意思，今日的對話額度已用完（每日 {DAILY_LIMIT} 則），明天再來聊吧！\n\n如有急事請直接聯繫瑀墨塗料。"
+    _touch(user_id)
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -148,7 +149,11 @@ async def handle_image(message_id: str, user_id: str = "anonymous") -> str:
                 ],
             }],
         )
-        return msg.content[0].text.strip()
+        reply = msg.content[0].text.strip()
+        # 記入對話歷史，讓客人接下來的文字提問（如「這上面顏色你們都有嗎」）有照片的上下文，
+        # 避免下一句就「忘記」剛剛看過的照片
+        _add_to_history(user_id, "（客人傳了一張照片，以下是我對照片的描述）", reply)
+        return reply
     except Exception as e:
         logger.error(f"圖片分析失敗：{e}")
         return "收到您的照片！方便再補充說明一下問題在哪嗎？我幫您記錄給葉經理。"
