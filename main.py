@@ -21,8 +21,14 @@ logger = logging.getLogger(__name__)
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
-# 內部人員臨時切換至客服測試模式（重啟後自動清除）
+# 內部人員（boss / engineer）可在「內部同仁模式 ⇄ 客服模式」之間切換
+# （以 user_id 記在記憶體，重啟後自動回到內部模式）
 _staff_test_mode: set[str] = set()
+
+# 切換指令（內部人員專用）
+_CMD_TO_CUSTOMER = ("客服模式", "切換客服", "測試模式", "客服測試")
+_CMD_TO_STAFF = ("內部模式", "同仁模式", "切回內部", "結束測試", "切回來", "退出測試")
+_CMD_MODE_STATUS = ("目前模式", "現在模式", "我在哪個模式", "現在什麼模式")
 
 # 塗料/工程部門聯絡資訊（等老闆給 ID 後填入）
 _BASE_URL = "https://um-line-agent-production.up.railway.app"
@@ -313,14 +319,18 @@ async def callback(request: Request):
             or role in ("boss", "engineer")
         )
 
-        # 內部人員角色切換
-        if is_staff and text in ("測試模式", "切換客服", "客服測試"):
+        # 內部人員（boss / engineer）模式切換：客服模式 ⇄ 內部同仁模式
+        if is_staff and text in _CMD_TO_CUSTOMER:
             _staff_test_mode.add(user_id)
-            await reply_line(reply_token, "🧪 已切換至客服測試模式\n現在會以一般客人身分與小墨對話\n輸入「結束測試」可切換回內部人員模式")
+            await reply_line(reply_token, "🧪 已切換至【客服模式】\n現在會以一般客人身分與小墨對話。\n輸入「內部模式」可切回內部同仁模式。")
             continue
-        if is_staff and user_id in _staff_test_mode and text in ("結束測試", "切回來", "退出測試"):
+        if is_staff and text in _CMD_TO_STAFF:
             _staff_test_mode.discard(user_id)
-            await reply_line(reply_token, "✅ 已切換回內部人員模式")
+            await reply_line(reply_token, "✅ 已切換回【內部同仁模式】\n輸入「客服模式」可再切換成客人視角。")
+            continue
+        if is_staff and text in _CMD_MODE_STATUS:
+            mode = "客服模式" if user_id in _staff_test_mode else "內部同仁模式"
+            await reply_line(reply_token, f"你目前在【{mode}】。\n切換指令：客服模式 / 內部模式")
             continue
 
         if is_staff and user_id not in _staff_test_mode:

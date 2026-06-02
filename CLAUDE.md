@@ -19,7 +19,7 @@
 ## 身份分流（main.py callback）
 - 內部人員（LINE_BOSS_USER_ID / LINE_ENG_BOSS_USER_ID / LINE_ENGINEER_USER_ID，或 users 表 role 為 boss/engineer）→ handle_staff：輕鬆對話 AI（小墨）＋「最近需求」客戶統計
 - 其餘 → handle_customer：AI 客服「小墨」＋ 圖文選單固定回覆
-- 內部人員可打「測試模式」切到客服視角，「結束測試」切回
+- 內部人員模式切換指令：「客服模式」切到客人視角體驗小墨、「內部模式」切回內部同仁、「目前模式」查目前狀態（相容舊詞 測試模式/結束測試；記憶體記錄，重啟自動回內部模式）
 - ⚠️ 老闆「在聊天裡即時查 WMS/UMmoney」目前未接線（parse_intent 未被呼叫）；定時推播也未啟動（見下方），故倉儲/會計數據目前完全沒有送達管道
 
 ## 環境變數
