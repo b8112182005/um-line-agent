@@ -13,7 +13,7 @@ from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USE
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
 from user_db import (
     init_db, get_role, add_pending, set_role,
-    list_approved, list_pending, find_user_by_name, get_setting,
+    list_approved, list_pending, find_user_by_name, get_setting, set_setting,
 )
 from push import leave_group
 
@@ -257,6 +257,32 @@ async def _bind_rich_menu(menu_id: str, user_id: str):
         logger.warning(f"綁定選單例外：{e}")
 
 
+# Rich Menu 名稱（與 rich_menu.py 的 definition name 一致）
+_MENU_NAMES = {"regular": "瑀墨助理選單", "vip": "瑀墨熟客選單"}
+
+
+async def get_menu_id(kind: str) -> str | None:
+    """取 Rich Menu id：先查 DB；沒有就從 LINE 選單清單比對名稱抓回並存 DB。
+    這樣 rich_menu.py 不論在哪建選單，webhook 都能自動取得 menu_id。"""
+    key = f"{kind}_menu_id"
+    mid = get_setting(key)
+    if mid:
+        return mid
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://api.line.me/v2/bot/richmenu/list", headers=headers)
+            if resp.status_code == 200:
+                for m in resp.json().get("richmenus", []):
+                    if m.get("name") == _MENU_NAMES.get(kind):
+                        set_setting(key, m["richMenuId"])
+                        logger.info(f"自動取得 {kind} 選單 id 並存 DB")
+                        return m["richMenuId"]
+    except Exception as e:
+        logger.warning(f"查選單 id 失敗：{e}")
+    return None
+
+
 async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool:
     """內部人員熟客名單管理指令。有處理回 True，否則 False。"""
     # 兩步確認的第二步：回「是/確定」
@@ -265,13 +291,13 @@ async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool
         target, tname = pc["target"], pc["name"]
         if pc["action"] == "approve":
             set_role(target, "approved")
-            vip_id = get_setting("vip_menu_id")
+            vip_id = await get_menu_id("vip")
             if vip_id:
                 await _bind_rich_menu(vip_id, target)
             await reply_line(reply_token, f"✅ 已將「{tname}」設為熟客，已開通線上備料選單。")
         else:
             set_role(target, "pending")
-            reg_id = get_setting("regular_menu_id")
+            reg_id = await get_menu_id("regular")
             if reg_id:
                 await _bind_rich_menu(reg_id, target)
             await reply_line(reply_token, f"✅ 已取消「{tname}」的熟客身分。")
@@ -363,7 +389,7 @@ async def callback(request: Request):
             if uid:
                 name = await get_line_profile(uid)
                 add_pending(uid, name)
-                regular_id = get_setting("regular_menu_id")
+                regular_id = await get_menu_id("regular")
                 if regular_id:
                     await _bind_rich_menu(regular_id, uid)
                 logger.info(f"新好友：{name or uid[:8]}（已歸非熟客）")
