@@ -57,18 +57,21 @@ def init_db():
         """)
 
 
-        # === 種子資料（確保每次啟動都在）===
-        seed_users = [
-            ("Ub9da80369a8d8c161d59c08cf282d783", "張紘瑀",   "boss",     "葉老闆/瑀墨塗料"),
-            ("U75c9e5c51324a7867cbdba0f1ddc9a31", "工程師",   "engineer", "開發維護"),
-            ("Ufbf785909fe2d05e8f0d2ee6784aa321", "悠悠",     "approved", ""),
-            ("U7a8bc939ffce3a958dbc8d3cabb7fcc0", "林逸婕",   "approved", ""),
+        # === 內部人員（boss/engineer）：每次啟動「強制校正」身份，避免被誤歸成客戶 ===
+        staff_seed = [
+            ("U37432ac6612d059dda3e1e35eec6f0f0", "葉采鑫",     "boss",     "塗料部門經理"),
+            ("Uc421135f54c0824cb6b70de7543d911e", "張紘瑀",     "boss",     "工程部門經理"),
+            ("U75c9e5c51324a7867cbdba0f1ddc9a31", "瑀墨工程師", "engineer", "開發維護(HT)"),
         ]
-        for uid, name, role, note in seed_users:
+        for uid, name, role, note in staff_seed:
             conn.execute(
-                "INSERT OR IGNORE INTO users (line_user_id, display_name, role, note) VALUES (?, ?, ?, ?)",
+                "INSERT INTO users (line_user_id, display_name, role, note) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(line_user_id) DO UPDATE SET "
+                "role=excluded.role, display_name=excluded.display_name, note=excluded.note",
                 (uid, name, role, note),
             )
+        # 清除舊的錯誤種子（張紘瑀 ID 曾填錯、備註誤植為「葉老闆」）
+        conn.execute("DELETE FROM users WHERE line_user_id = 'Ub9da80369a8d8c161d59c08cf282d783'")
 
         seed_groups = [
             ("C5002a72a4fd12f95f97d27dce1858ea1", "瑀墨測試群", "allowed"),
