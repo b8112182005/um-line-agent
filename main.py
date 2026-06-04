@@ -11,7 +11,10 @@ from fastapi.staticfiles import StaticFiles
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
-from user_db import init_db, get_role
+from user_db import (
+    init_db, get_role, add_pending, set_role,
+    list_approved, list_pending, find_user_by_name, get_setting,
+)
 from push import leave_group
 
 import httpx
@@ -29,6 +32,10 @@ _staff_test_mode: set[str] = set()
 _CMD_TO_CUSTOMER = ("客服模式", "切換客服", "測試模式", "客服測試")
 _CMD_TO_STAFF = ("內部模式", "同仁模式", "切回內部", "結束測試", "切回來", "退出測試")
 _CMD_MODE_STATUS = ("目前模式", "現在模式", "我在哪個模式", "現在什麼模式")
+
+# 內部人員審核熟客的「待確認」暫存（重啟清除）
+# {內部人員 user_id: {"action": "approve"/"demote", "target": 客人 user_id, "name": 客人名}}
+_pending_confirm: dict[str, dict] = {}
 
 # 塗料/工程部門聯絡資訊（等老闆給 ID 後填入）
 _BASE_URL = "https://um-line-agent-production.up.railway.app"
@@ -223,6 +230,96 @@ async def reply_line(reply_token: str, text: str):
             logger.error(f"LINE reply 失敗：{resp.status_code} {resp.text}")
 
 
+async def get_line_profile(user_id: str) -> str:
+    """取用戶顯示名稱，失敗回空字串。"""
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"https://api.line.me/v2/bot/profile/{user_id}", headers=headers)
+            if resp.status_code == 200:
+                return resp.json().get("displayName", "")
+    except Exception as e:
+        logger.warning(f"取 profile 失敗：{e}")
+    return ""
+
+
+async def _bind_rich_menu(menu_id: str, user_id: str):
+    """綁定 Rich Menu 到指定用戶（LINE linkRichMenuIdToUser）。"""
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"https://api.line.me/v2/bot/user/{user_id}/richmenu/{menu_id}", headers=headers
+            )
+            if resp.status_code != 200:
+                logger.warning(f"綁定選單失敗 {user_id[:8]}：{resp.status_code} {resp.text}")
+    except Exception as e:
+        logger.warning(f"綁定選單例外：{e}")
+
+
+async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool:
+    """內部人員熟客名單管理指令。有處理回 True，否則 False。"""
+    # 兩步確認的第二步：回「是/確定」
+    if text in ("是", "確定", "對", "是的") and user_id in _pending_confirm:
+        pc = _pending_confirm.pop(user_id)
+        target, tname = pc["target"], pc["name"]
+        if pc["action"] == "approve":
+            set_role(target, "approved")
+            vip_id = get_setting("vip_menu_id")
+            if vip_id:
+                await _bind_rich_menu(vip_id, target)
+            await reply_line(reply_token, f"✅ 已將「{tname}」設為熟客，已開通線上備料選單。")
+        else:
+            set_role(target, "pending")
+            reg_id = get_setting("regular_menu_id")
+            if reg_id:
+                await _bind_rich_menu(reg_id, target)
+            await reply_line(reply_token, f"✅ 已取消「{tname}」的熟客身分。")
+        return True
+
+    # 客戶名單：列出熟客 / 非熟客
+    if text in ("客戶名單", "名單"):
+        vips = list_approved()
+        regs = list_pending()
+        lines = ["📋 客戶名單", "", "🌟 熟客（可線上備料）："]
+        lines += ([f"　• {u['display_name'] or '(未命名)'}" for u in vips] if vips else ["　（目前沒有熟客）"])
+        lines += ["", "👤 非熟客："]
+        lines += ([f"　• {u['display_name'] or '(未命名)'}" for u in regs] if regs else ["　（目前沒有非熟客）"])
+        lines += ["", "設為熟客請打：「○○○是熟客」"]
+        await reply_line(reply_token, "\n".join(lines))
+        return True
+
+    # 設為熟客：「○○○是熟客」→ 兩步確認第一步
+    if text.endswith("是熟客") and len(text) > 3:
+        name = text[:-3].strip()
+        matches = [u for u in find_user_by_name(name) if u["role"] != "approved"] if name else []
+        if not matches:
+            await reply_line(reply_token, f"找不到叫「{name}」的非熟客。可先打「客戶名單」確認名字。")
+        elif len(matches) > 1:
+            await reply_line(reply_token, "找到多位：" + "、".join(u["display_name"] for u in matches) + "\n請打更完整的名字。")
+        else:
+            m = matches[0]
+            _pending_confirm[user_id] = {"action": "approve", "target": m["user_id"], "name": m["display_name"]}
+            await reply_line(reply_token, f"您是指「{m['display_name']}」嗎？\n回「是」或「確定」我就把他設為熟客。")
+        return True
+
+    # 取消熟客：「○○○取消熟客」→ 兩步確認第一步
+    if text.endswith("取消熟客") and len(text) > 4:
+        name = text[:-4].strip()
+        matches = [u for u in find_user_by_name(name) if u["role"] == "approved"] if name else []
+        if not matches:
+            await reply_line(reply_token, f"找不到叫「{name}」的熟客。")
+        elif len(matches) > 1:
+            await reply_line(reply_token, "找到多位：" + "、".join(u["display_name"] for u in matches) + "\n請打更完整的名字。")
+        else:
+            m = matches[0]
+            _pending_confirm[user_id] = {"action": "demote", "target": m["user_id"], "name": m["display_name"]}
+            await reply_line(reply_token, f"您是指「{m['display_name']}」嗎？\n回「是」或「確定」我就取消他的熟客身分。")
+        return True
+
+    return False
+
+
 
 @app.post("/callback")
 async def callback(request: Request):
@@ -258,6 +355,18 @@ async def callback(request: Request):
         if event_type == "leave" and source_type == "group":
             group_id = source.get("groupId", "")
             logger.info(f"被移出群組：{group_id}")
+            continue
+
+        # === 新客人加好友 → 自動歸非熟客 + 綁非熟客選單，不通知內部人員 ===
+        if event_type == "follow":
+            uid = source.get("userId", "")
+            if uid:
+                name = await get_line_profile(uid)
+                add_pending(uid, name)
+                regular_id = get_setting("regular_menu_id")
+                if regular_id:
+                    await _bind_rich_menu(regular_id, uid)
+                logger.info(f"新好友：{name or uid[:8]}（已歸非熟客）")
             continue
 
         # === 群組訊息一律忽略 ===
@@ -305,6 +414,11 @@ async def callback(request: Request):
             await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
             continue
 
+        # 熟客選單「線上備料」→ 叫貨表建置中（佔位，做好後改為連結）
+        if text == "線上備料":
+            await reply_line(reply_token, "🛒 線上叫貨表建置中\n\n專屬熟客的線上備料系統正在準備，完成後會在這裡開放！\n目前需要備料，直接告訴小墨品項與數量即可，我會幫您轉達專員。")
+            continue
+
         # 統一選單按鈕：所有用戶皆可使用，不受角色限制
         if text in CONTACTS:
             await reply_flex(reply_token, _make_contact_flex(CONTACTS[text]))
@@ -332,6 +446,11 @@ async def callback(request: Request):
             mode = "客服模式" if user_id in _staff_test_mode else "內部同仁模式"
             await reply_line(reply_token, f"你目前在【{mode}】。\n切換指令：客服模式 / 內部模式")
             continue
+
+        # 內部人員（非客服模式）熟客名單管理：客戶名單／○○是熟客／是·確定
+        if is_staff and user_id not in _staff_test_mode:
+            if await _handle_staff_admin(text, user_id, reply_token):
+                continue
 
         if is_staff and user_id not in _staff_test_mode:
             response = await handle_staff(text, user_id)

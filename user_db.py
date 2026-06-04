@@ -48,6 +48,13 @@ def init_db():
                 created_at   TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        # 設定鍵值表（存 Rich Menu 的 menu_id 等）
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT DEFAULT ''
+            )
+        """)
 
 
         # === 種子資料（確保每次啟動都在）===
@@ -124,6 +131,17 @@ def block_user(user_id: str):
         conn.commit()
 
 
+def set_role(user_id: str, role: str) -> bool:
+    """設定用戶角色（不可改動 boss/engineer，避免誤改內部人員）。回傳是否有更新。"""
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE users SET role = ? WHERE line_user_id = ? AND role NOT IN ('boss', 'engineer')",
+            (role, user_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
 def list_approved() -> list[dict]:
     """列出所有已通過的用戶"""
     with _conn() as conn:
@@ -179,6 +197,26 @@ def find_user_by_name(name: str) -> list[dict]:
             (f"%{name}%",)
         ).fetchall()
     return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or ""} for r in rows]
+
+
+# === 設定鍵值 ===
+
+def get_setting(key: str) -> str | None:
+    """取得設定值，不存在回 None"""
+    with _conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_setting(key: str, value: str):
+    """寫入/更新設定值"""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        conn.commit()
 
 
 # === 群組管理 ===
