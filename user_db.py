@@ -61,7 +61,8 @@ def init_db():
         staff_seed = [
             ("U37432ac6612d059dda3e1e35eec6f0f0", "葉采鑫",     "boss",     "塗料部門經理"),
             ("Uc421135f54c0824cb6b70de7543d911e", "張紘瑀",     "boss",     "工程部門經理"),
-            ("U75c9e5c51324a7867cbdba0f1ddc9a31", "瑀墨工程師", "engineer", "開發維護(HT)"),
+            ("Uc351b3ea15a51309878e298e887d3867", "瑀墨工程師", "engineer", "開發維護(HT，本帳號 ID)"),
+            ("U75c9e5c51324a7867cbdba0f1ddc9a31", "瑀墨工程師", "engineer", "開發維護(HT，備用 ID)"),
         ]
         for uid, name, role, note in staff_seed:
             conn.execute(
