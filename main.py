@@ -26,12 +26,13 @@ logger = logging.getLogger(__name__)
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
-# 內部人員（boss / engineer）可在「內部同仁模式 ⇄ 客服模式」之間切換
-# （以 user_id 記在記憶體，重啟後自動回到內部模式）
-_staff_test_mode: set[str] = set()
+# 內部人員（boss / engineer）可在三種視角間切換：內部同仁 / 客服(非熟客客人) / 熟客
+# user_id -> "service" | "vip"；不在 dict = 內部同仁模式（預設，重啟後全部回預設）
+_staff_mode: dict[str, str] = {}
 
 # 切換指令（內部人員專用）
-_CMD_TO_CUSTOMER = ("客服模式", "切換客服", "測試模式", "客服測試")
+_CMD_TO_SERVICE = ("客服模式", "切換客服", "測試模式", "客服測試", "非熟客模式", "一般客人模式")
+_CMD_TO_VIP = ("熟客模式", "熟客視角", "熟客測試", "VIP模式", "vip模式")
 _CMD_TO_STAFF = ("內部模式", "同仁模式", "切回內部", "結束測試", "切回來", "退出測試")
 _CMD_MODE_STATUS = ("目前模式", "現在模式", "我在哪個模式", "現在什麼模式")
 
@@ -266,6 +267,15 @@ async def _bind_rich_menu(menu_id: str, user_id: str):
         logger.warning(f"綁定選單例外：{e}")
 
 
+async def _switch_menu(kind: str, user_id: str):
+    """依 kind（'vip' / 'regular'）切換用戶 rich menu；選單不存在則略過。"""
+    mid = await get_menu_id(kind)
+    if mid:
+        await _bind_rich_menu(mid, user_id)
+    else:
+        logger.warning(f"切換選單略過：查無 {kind} menu_id")
+
+
 # Rich Menu 名稱（與 rich_menu.py 的 definition name 一致）
 _MENU_NAMES = {"regular": "瑀墨助理選單", "vip": "瑀墨熟客選單"}
 
@@ -449,11 +459,27 @@ async def callback(request: Request):
             await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
             continue
 
+        # 角色與內部人員判定（提前，供「線上備料」與模式切換共用）
+        role = get_role(user_id)
+        is_staff = (
+            user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
+            or role in ("boss", "engineer")
+        )
+        # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
+        sim_mode = _staff_mode.get(user_id) if is_staff else None
+
         # 熟客選單「線上備料」→ 熟客回 LIFF 下單連結，非熟客提示洽專員
+        # 內部人員依模擬視角體驗：熟客模式→可下單、客服模式→當非熟客擋下
         if text == "線上備料":
+            if sim_mode == "vip":
+                is_vip = True
+            elif sim_mode == "service":
+                is_vip = False
+            else:
+                is_vip = get_role(user_id) in ("approved", "boss", "engineer")
             if not LIFF_ID:
                 await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
-            elif get_role(user_id) in ("approved", "boss", "engineer"):
+            elif is_vip:
                 await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
             else:
                 await reply_line(reply_token, "🛒 線上備料是熟客專屬服務。\n需要備料請直接告訴小墨品項與數量，我會幫您轉達專員（也可洽詢開通熟客資格）。")
@@ -467,32 +493,34 @@ async def callback(request: Request):
             await reply_line(reply_token, MENU_RESPONSES[text])
             continue
 
-        role = get_role(user_id)
-        is_staff = (
-            user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
-            or role in ("boss", "engineer")
-        )
-
-        # 內部人員（boss / engineer）模式切換：客服模式 ⇄ 內部同仁模式
-        if is_staff and text in _CMD_TO_CUSTOMER:
-            _staff_test_mode.add(user_id)
-            await reply_line(reply_token, "🧪 已切換至【客服模式】\n現在會以一般客人身分與小墨對話。\n輸入「內部模式」可切回內部同仁模式。")
+        # 內部人員（boss / engineer）三態模式切換：內部同仁 / 客服(非熟客) / 熟客
+        # 切換時同步換 rich menu，讓內部人員實際看到該視角的選單
+        if is_staff and text in _CMD_TO_SERVICE:
+            _staff_mode[user_id] = "service"
+            await _switch_menu("regular", user_id)
+            await reply_line(reply_token, "🧪 已切換至【客服模式】（一般客人視角）\n選單已換成非熟客版；對話走小墨客服，「線上備料」會被當非熟客擋下。\n切換指令：熟客模式 / 內部模式")
+            continue
+        if is_staff and text in _CMD_TO_VIP:
+            _staff_mode[user_id] = "vip"
+            await _switch_menu("vip", user_id)
+            await reply_line(reply_token, "🌟 已切換至【熟客模式】（熟客視角）\n選單已換成熟客版，可點「線上備料」實際走一遍下單流程。\n切換指令：客服模式 / 內部模式")
             continue
         if is_staff and text in _CMD_TO_STAFF:
-            _staff_test_mode.discard(user_id)
-            await reply_line(reply_token, "✅ 已切換回【內部同仁模式】\n輸入「客服模式」可再切換成客人視角。")
+            _staff_mode.pop(user_id, None)
+            await _switch_menu("vip", user_id)  # 內部人員本可線上備料 → 還原熟客版選單
+            await reply_line(reply_token, "✅ 已切換回【內部同仁模式】\n選單已還原。\n切換指令：客服模式（非熟客）/ 熟客模式")
             continue
         if is_staff and text in _CMD_MODE_STATUS:
-            mode = "客服模式" if user_id in _staff_test_mode else "內部同仁模式"
-            await reply_line(reply_token, f"你目前在【{mode}】。\n切換指令：客服模式 / 內部模式")
+            label = {"service": "客服模式（非熟客客人）", "vip": "熟客模式"}.get(sim_mode, "內部同仁模式")
+            await reply_line(reply_token, f"你目前在【{label}】。\n切換指令：內部模式 / 客服模式 / 熟客模式")
             continue
 
-        # 內部人員（非客服模式）熟客名單管理：客戶名單／○○是熟客／是·確定
-        if is_staff and user_id not in _staff_test_mode:
+        # 內部同仁模式才走後台管理與同仁對話；模擬客人視角（service/vip）時走客服
+        staff_active = is_staff and sim_mode is None
+
+        if staff_active:
             if await _handle_staff_admin(text, user_id, reply_token):
                 continue
-
-        if is_staff and user_id not in _staff_test_mode:
             response = await handle_staff(text, user_id)
         else:
             response = await handle_customer(text, user_id)
