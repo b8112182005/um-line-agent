@@ -321,15 +321,11 @@ async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool
         target, tname = pc["target"], pc["name"]
         if pc["action"] == "approve":
             set_role(target, "approved")
-            vip_id = await get_menu_id("vip")
-            if vip_id:
-                await _bind_rich_menu(vip_id, target)
+            await _switch_menu("vip", target)  # 自我修復：快取失效會自動重抓
             await reply_line(reply_token, f"✅ 已將「{tname}」設為熟客，已開通線上備料選單。")
         else:
             set_role(target, "pending")
-            reg_id = await get_menu_id("regular")
-            if reg_id:
-                await _bind_rich_menu(reg_id, target)
+            await _switch_menu("regular", target)
             await reply_line(reply_token, f"✅ 已取消「{tname}」的熟客身分。")
         return True
 
@@ -419,9 +415,7 @@ async def callback(request: Request):
             if uid:
                 name = await get_line_profile(uid)
                 add_pending(uid, name)
-                regular_id = await get_menu_id("regular")
-                if regular_id:
-                    await _bind_rich_menu(regular_id, uid)
+                await _switch_menu("regular", uid)  # 自我修復：快取失效會自動重抓
                 logger.info(f"新好友：{name or uid[:8]}（已歸非熟客）")
             continue
 

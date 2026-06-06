@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 LINE_API = "https://api.line.me/v2/bot"
 HEADERS = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
 WEBSITE_URL = "https://yumo-website.vercel.app"
+# 熟客「線上備料」一鍵直接開 LIFF 下單表單（LIFF 已上線，免兩段式）
+LIFF_ORDER_URL = "https://liff.line.me/2010310048-cDA0VIKv"
 
 W, H = 2500, 1686
 HALF = W // 2
@@ -46,7 +48,8 @@ REGULAR_CELLS = [
 ]
 
 # === 熟客選單（6 格：含線上備料）===
-# 「線上備料」用 message（非 uri），由 main.py 攔截回覆（叫貨表建置中，做好後改連結）
+# 「線上備料」用 uri 直接開 LIFF 下單表單（一鍵進表單）。
+# main.py 仍保留 message 文字攔截，供使用者打字「線上備料」時回連結 + 非熟客導引。
 VIP_MENU = {
     "size": {"width": W, "height": H},
     "selected": True,
@@ -58,7 +61,7 @@ VIP_MENU = {
         {"bounds": {"x": 0, "y": THIRD, "width": HALF, "height": THIRD}, "action": {"type": "message", "text": "產品介紹"}},
         {"bounds": {"x": HALF, "y": THIRD, "width": HALF, "height": THIRD}, "action": {"type": "message", "text": "常見問題"}},
         {"bounds": {"x": 0, "y": THIRD * 2, "width": HALF, "height": THIRD}, "action": {"type": "uri", "uri": WEBSITE_URL, "label": "作品集"}},
-        {"bounds": {"x": HALF, "y": THIRD * 2, "width": HALF, "height": THIRD}, "action": {"type": "message", "text": "線上備料"}},
+        {"bounds": {"x": HALF, "y": THIRD * 2, "width": HALF, "height": THIRD}, "action": {"type": "uri", "uri": LIFF_ORDER_URL, "label": "線上備料"}},
     ],
 }
 VIP_CELLS = [
