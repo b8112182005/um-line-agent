@@ -1,5 +1,19 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-06 — 熟客線上叫貨（LIFF）+ 雙人下單通知
+
+### 新增
+- `liff_api.py`：LIFF 線上叫貨 BFF。熟客在 LINE 內開表單下單，後端驗證 idToken（限 approved/boss/engineer），代理 WMS 查品項目錄、查上次訂單、建「待確認訂單」（不扣庫存）。
+- `main.py`：掛上 `/liff` 路由 + `/order` 表單頁（`assets/order.html`）。「線上備料」改為：熟客回 LIFF 連結、非熟客提示洽專員、未設定 LIFF_ID 則回設定中。
+- `api_client.py`：新增 `wms_post`。
+- `config.py`：新增 `LIFF_ID`、`LINE_LOGIN_CHANNEL_ID`。
+
+### 變更
+- 新訂單通知對象由「只通知葉老闆」擴為「葉老闆（塗料）+ 工程師（HT）」。
+
+### 部署前必設環境變數（Railway）
+- `LIFF_ID`、`LINE_LOGIN_CHANNEL_ID`（= 驗 idToken 的 LINE Login channel ID）。未設則線上叫貨停用、其餘功能不受影響。
+
 ## 2026-06-01 — 內部人員模式切換指令
 
 ### 新增

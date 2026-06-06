@@ -9,15 +9,17 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID, LIFF_ID
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
 from user_db import (
     init_db, get_role, add_pending, set_role,
     list_approved, list_pending, find_user_by_name, get_setting, set_setting,
 )
 from push import leave_group
+from liff_api import router as liff_router
 
 import httpx
+from fastapi.responses import FileResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,6 +69,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="瑀墨助理", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+app.include_router(liff_router)
+
+
+@app.get("/order", include_in_schema=False)
+async def order_page():
+    """LIFF 線上叫貨表單頁"""
+    return FileResponse("assets/order.html")
 
 
 # 僅供本機開發在「明確設定」時放行未簽章請求；正式環境一律 fail-closed
@@ -440,9 +449,14 @@ async def callback(request: Request):
             await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
             continue
 
-        # 熟客選單「線上備料」→ 叫貨表建置中（佔位，做好後改為連結）
+        # 熟客選單「線上備料」→ 熟客回 LIFF 下單連結，非熟客提示洽專員
         if text == "線上備料":
-            await reply_line(reply_token, "🛒 線上叫貨表建置中\n\n專屬熟客的線上備料系統正在準備，完成後會在這裡開放！\n目前需要備料，直接告訴小墨品項與數量即可，我會幫您轉達專員。")
+            if not LIFF_ID:
+                await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
+            elif get_role(user_id) in ("approved", "boss", "engineer"):
+                await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
+            else:
+                await reply_line(reply_token, "🛒 線上備料是熟客專屬服務。\n需要備料請直接告訴小墨品項與數量，我會幫您轉達專員（也可洽詢開通熟客資格）。")
             continue
 
         # 統一選單按鈕：所有用戶皆可使用，不受角色限制

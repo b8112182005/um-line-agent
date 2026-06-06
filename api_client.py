@@ -51,5 +51,9 @@ async def wms_get(path: str, **kwargs):
     return await _request("wms", "GET", path, **kwargs)
 
 
+async def wms_post(path: str, **kwargs):
+    return await _request("wms", "POST", path, **kwargs)
+
+
 async def money_get(path: str, **kwargs):
     return await _request("money", "GET", path, **kwargs)

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>瑀墨塗料 — 線上叫貨</title>
+<style>
+  :root{ --navy:#2B5C8A; --gold:#C8A45C; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:"Microsoft JhengHei",sans-serif; background:#f4f6f9; color:#222; padding-bottom:92px; }
+  header{ background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:10; }
+  header h1{ font-size:18px; }
+  header .sub{ font-size:12px; opacity:.85; margin-top:2px; }
+  .wrap{ padding:12px 16px; }
+  .search input{ width:100%; padding:11px; border:1px solid #ccc; border-radius:8px; font-size:15px; margin-bottom:10px; }
+  .last-box{ background:#fff8e8; border:1px solid var(--gold); border-radius:8px; padding:10px 12px; margin-bottom:10px; font-size:13px; line-height:1.7; }
+  .last-box button{ margin-top:8px; background:var(--gold); color:#fff; border:none; padding:7px 14px; border-radius:6px; font-size:13px; }
+  .item{ background:#fff; border:1px solid #e3e8ee; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .item .info{ flex:1; padding-right:8px; }
+  .item .nm{ font-size:14px; font-weight:600; }
+  .item .meta{ font-size:12px; color:#777; margin-top:2px; }
+  .qty{ display:flex; align-items:center; gap:8px; }
+  .qty button{ width:32px; height:32px; border:none; border-radius:6px; background:var(--navy); color:#fff; font-size:18px; line-height:1; }
+  .qty span{ min-width:26px; text-align:center; font-size:16px; }
+  .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .cart-bar .n{ font-size:14px; }
+  .cart-bar button{ background:var(--navy); color:#fff; border:none; padding:12px 22px; border-radius:8px; font-size:16px; font-weight:600; }
+  .cart-bar button:disabled{ background:#aab2bd; }
+  .empty{ text-align:center; color:#999; padding:30px; font-size:14px; }
+  #loading{ text-align:center; padding:50px 20px; color:#777; }
+  .toast{ position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; }
+  .toast.show{ opacity:.95; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 瑀墨塗料 — 線上叫貨</h1>
+  <div class="sub" id="who">驗證中…</div>
+</header>
+<div id="loading">載入中…</div>
+<div class="wrap" id="main" style="display:none">
+  <div id="lastBox"></div>
+  <div class="search"><input id="q" placeholder="搜尋品名（例：乳膠漆、底漆）" /></div>
+  <div id="list"></div>
+</div>
+<div class="cart-bar" id="cartBar" style="display:none">
+  <div class="n" id="cartN">尚未選購</div>
+  <button id="submitBtn" disabled onclick="submitOrder()">送出叫貨</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+var idToken = "", cart = {}, catalog = [], lastItems = [];
+
+function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },2000); }
+function H(){ return {'X-Line-IdToken': idToken}; }
+function showError(msg){ var l=document.getElementById('loading'); l.textContent=msg; l.style.display='block'; document.getElementById('main').style.display='none'; document.getElementById('cartBar').style.display='none'; }
+
+async function init(){
+  try{
+    var cfg = await (await fetch('/liff/config')).json();
+    if(!cfg.liff_id){ showError('系統尚未設定 LIFF ID，請通知管理員'); return; }
+    await liff.init({ liffId: cfg.liff_id });
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    idToken = liff.getIDToken();
+    var prof = await liff.getProfile();
+    document.getElementById('who').textContent = '熟客：' + prof.displayName;
+    await loadCatalog('');
+    await loadHistory();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('cartBar').style.display = 'flex';
+  }catch(e){
+    showError('載入失敗：' + (e.message || e));
+  }
+}
+
+var _t;
+document.addEventListener('input', function(e){
+  if(e.target.id === 'q'){ clearTimeout(_t); _t = setTimeout(function(){ loadCatalog(e.target.value); }, 300); }
+});
+
+async function loadCatalog(s){
+  var r = await fetch('/liff/catalog?search=' + encodeURIComponent(s), { headers: H() });
+  if(r.status === 403){ showError('此功能限熟客使用，請洽專員開通'); return; }
+  if(!r.ok){ toast('載入品項失敗'); return; }
+  catalog = await r.json();
+  render();
+}
+
+async function loadHistory(){
+  try{
+    var r = await fetch('/liff/history', { headers: H() });
+    if(!r.ok) return;
+    var d = await r.json();
+    if(d.items && d.items.length){
+      lastItems = d.items;
+      var box = document.getElementById('lastBox');
+      box.className = 'last-box';
+      box.innerHTML = '📋 上次您訂的（' + (d.date || '') + '）：<br>' +
+        d.items.map(function(it){ return '· ' + it.product_name + ' x' + it.quantity + (it.unit||''); }).join('<br>') +
+        '<br><button onclick="fillLast()">一鍵帶入上次</button>';
+    }
+  }catch(e){}
+}
+
+function fillLast(){
+  lastItems.forEach(function(it){
+    if(it.product_id) cart[it.product_id] = { product_id: it.product_id, product_name: it.product_name, unit: it.unit, quantity: it.quantity };
+  });
+  render(); updateCart(); toast('已帶入上次品項');
+}
+
+function render(){
+  var list = document.getElementById('list');
+  if(!catalog.length){ list.innerHTML = '<div class="empty">找不到品項</div>'; return; }
+  list.innerHTML = catalog.map(function(p){
+    var q = cart[p.id] ? cart[p.id].quantity : 0;
+    var nm = (p.brand ? p.brand + ' ' : '') + p.name + (p.color_name ? '（' + p.color_name + '）' : '');
+    return '<div class="item"><div class="info"><div class="nm">' + nm + '</div>' +
+      '<div class="meta">' + (p.spec || '') + '　' + (p.unit||'') + '</div></div>' +
+      '<div class="qty"><button onclick="chg(' + p.id + ',-1)">−</button>' +
+      '<span id="q' + p.id + '">' + q + '</span>' +
+      '<button onclick="chg(' + p.id + ',1)">＋</button></div></div>';
+  }).join('');
+}
+
+function chg(id, d){
+  var p = catalog.find(function(x){ return x.id === id; });
+  if(!p) return;
+  var cur = cart[id] ? cart[id].quantity : 0;
+  cur = Math.max(0, cur + d);
+  if(cur === 0){ delete cart[id]; }
+  else{ cart[id] = { product_id: id, product_name: (p.brand ? p.brand + ' ' : '') + p.name + (p.color_name ? '（' + p.color_name + '）' : ''), unit: p.unit, quantity: cur }; }
+  var el = document.getElementById('q' + id); if(el) el.textContent = cur;
+  updateCart();
+}
+
+function updateCart(){
+  var ids = Object.keys(cart);
+  var tot = ids.reduce(function(s,k){ return s + cart[k].quantity; }, 0);
+  document.getElementById('cartN').textContent = ids.length ? ('已選 ' + ids.length + ' 項 / 共 ' + tot + ' 件') : '尚未選購';
+  document.getElementById('submitBtn').disabled = !ids.length;
+}
+
+async function submitOrder(){
+  var items = Object.keys(cart).map(function(k){ return cart[k]; });
+  if(!items.length) return;
+  document.getElementById('submitBtn').disabled = true;
+  try{
+    var r = await fetch('/liff/order', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, H()),
+      body: JSON.stringify({ items: items })
+    });
+    var d = await r.json();
+    if(r.ok){
+      alert('✅ 叫貨單已送出！\n單號：' + d.order_number + '\n專員確認後會與您聯繫。');
+      cart = {}; render(); updateCart();
+      if(liff.isInClient()) liff.closeWindow();
+    }else{
+      alert('送出失敗：' + (d.detail || '請稍後再試'));
+      document.getElementById('submitBtn').disabled = false;
+    }
+  }catch(e){
+    alert('送出失敗：' + (e.message || e));
+    document.getElementById('submitBtn').disabled = false;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
