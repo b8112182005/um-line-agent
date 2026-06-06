@@ -253,27 +253,38 @@ async def get_line_profile(user_id: str) -> str:
     return ""
 
 
-async def _bind_rich_menu(menu_id: str, user_id: str):
-    """綁定 Rich Menu 到指定用戶（LINE linkRichMenuIdToUser）。"""
-    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+async def _bind_rich_menu(menu_id: str, user_id: str) -> bool:
+    """綁定 Rich Menu 到指定用戶（LINE linkRichMenuIdToUser）。回傳是否成功。
+    注意：POST 需帶 Content-Length: 0（httpx 對無 body POST 會自動帶）。"""
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}", "Content-Length": "0"}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                f"https://api.line.me/v2/bot/user/{user_id}/richmenu/{menu_id}", headers=headers
+                f"https://api.line.me/v2/bot/user/{user_id}/richmenu/{menu_id}",
+                headers=headers, content=b"",
             )
-            if resp.status_code != 200:
-                logger.warning(f"綁定選單失敗 {user_id[:8]}：{resp.status_code} {resp.text}")
+            if resp.status_code == 200:
+                return True
+            logger.warning(f"綁定選單失敗 {user_id[:8]}：{resp.status_code} {resp.text}")
     except Exception as e:
         logger.warning(f"綁定選單例外：{e}")
+    return False
 
 
-async def _switch_menu(kind: str, user_id: str):
-    """依 kind（'vip' / 'regular'）切換用戶 rich menu；選單不存在則略過。"""
+async def _switch_menu(kind: str, user_id: str) -> bool:
+    """依 kind（'vip' / 'regular'）切換用戶 rich menu。回傳是否成功。
+    綁定失敗（多半是 DB 快取的 menu_id 已失效）→ 清快取、重抓 LINE 現存選單再試一次。"""
     mid = await get_menu_id(kind)
-    if mid:
-        await _bind_rich_menu(mid, user_id)
-    else:
-        logger.warning(f"切換選單略過：查無 {kind} menu_id")
+    if mid and await _bind_rich_menu(mid, user_id):
+        return True
+    # 自我修復：清掉可能失效的快取，強制從 LINE 重新比對名稱抓回
+    set_setting(f"{kind}_menu_id", "")
+    mid = await get_menu_id(kind)
+    if mid and await _bind_rich_menu(mid, user_id):
+        logger.info(f"切換選單：清快取重抓 {kind} 後綁定成功")
+        return True
+    logger.warning(f"切換選單失敗：{kind} menu 無法綁定（查無有效 menu_id）")
+    return False
 
 
 # Rich Menu 名稱（與 rich_menu.py 的 definition name 一致）
@@ -497,18 +508,21 @@ async def callback(request: Request):
         # 切換時同步換 rich menu，讓內部人員實際看到該視角的選單
         if is_staff and text in _CMD_TO_SERVICE:
             _staff_mode[user_id] = "service"
-            await _switch_menu("regular", user_id)
-            await reply_line(reply_token, "🧪 已切換至【客服模式】（一般客人視角）\n選單已換成非熟客版；對話走小墨客服，「線上備料」會被當非熟客擋下。\n切換指令：熟客模式 / 內部模式")
+            ok = await _switch_menu("regular", user_id)
+            menu_note = "選單已換成非熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
+            await reply_line(reply_token, f"🧪 已切換至【客服模式】（一般客人視角）\n{menu_note}；對話走小墨客服，「線上備料」會被當非熟客擋下。\n切換指令：熟客模式 / 內部模式")
             continue
         if is_staff and text in _CMD_TO_VIP:
             _staff_mode[user_id] = "vip"
-            await _switch_menu("vip", user_id)
-            await reply_line(reply_token, "🌟 已切換至【熟客模式】（熟客視角）\n選單已換成熟客版，可點「線上備料」實際走一遍下單流程。\n切換指令：客服模式 / 內部模式")
+            ok = await _switch_menu("vip", user_id)
+            menu_note = "選單已換成熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
+            await reply_line(reply_token, f"🌟 已切換至【熟客模式】（熟客視角）\n{menu_note}，可點「線上備料」實際走一遍下單流程。\n切換指令：客服模式 / 內部模式")
             continue
         if is_staff and text in _CMD_TO_STAFF:
             _staff_mode.pop(user_id, None)
-            await _switch_menu("vip", user_id)  # 內部人員本可線上備料 → 還原熟客版選單
-            await reply_line(reply_token, "✅ 已切換回【內部同仁模式】\n選單已還原。\n切換指令：客服模式（非熟客）/ 熟客模式")
+            ok = await _switch_menu("vip", user_id)  # 內部人員本可線上備料 → 還原熟客版選單
+            menu_note = "選單已還原（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能還原（稍後再試一次）"
+            await reply_line(reply_token, f"✅ 已切換回【內部同仁模式】\n{menu_note}。\n切換指令：客服模式（非熟客）/ 熟客模式")
             continue
         if is_staff and text in _CMD_MODE_STATUS:
             label = {"service": "客服模式（非熟客客人）", "vip": "熟客模式"}.get(sim_mode, "內部同仁模式")
