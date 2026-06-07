@@ -2,18 +2,20 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>瑀墨塗料 — 線上叫貨</title>
 <style>
   :root{ --ink:#1b1b1f; --navy:#2B5C8A; --gold:#C8A45C; --gold-d:#a8863f; }
   *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  body{ font-family:"Microsoft JhengHei","PingFang TC","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; background:#f4f6f9; color:#222; padding-bottom:96px; }
-  header{ background:var(--ink); color:var(--gold); padding:14px 16px; position:sticky; top:0; z-index:20; border-bottom:2px solid var(--gold); }
-  header h1{ font-size:18px; }
+  body{ font-family:"Microsoft JhengHei","PingFang TC","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; background:#f4f6f9; color:#222; padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
+  /* 標題列＋工具列合併吸頂，不再猜高度 */
+  .topbar{ position:sticky; top:0; z-index:20; background:#f4f6f9; }
+  header{ background:var(--ink); color:var(--gold); padding:14px 16px; border-bottom:2px solid var(--gold); }
+  header h1{ font-size:17px; }
   header .sub{ font-size:12px; opacity:.85; margin-top:2px; }
 
-  /* 搜尋 + 品牌快篩（吸頂） */
-  .toolbar{ position:sticky; top:54px; z-index:15; background:#f4f6f9; padding:10px 16px 6px; }
+  /* 搜尋 + 品牌快篩 */
+  .toolbar{ background:#f4f6f9; padding:10px 16px 8px; box-shadow:0 4px 6px -4px rgba(0,0,0,.12); }
   .search input{ width:100%; padding:12px 14px; border:1px solid #ccd3db; border-radius:10px; font-size:16px; }
   .chips{ display:flex; gap:8px; overflow-x:auto; padding:10px 0 2px; -webkit-overflow-scrolling:touch; }
   .chips::-webkit-scrollbar{ display:none; }
@@ -43,7 +45,7 @@
   .qty .num{ min-width:30px; text-align:center; font-size:18px; font-weight:700; }
   .qty .unit{ font-size:11px; color:#999; }
 
-  .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -2px 10px rgba(0,0,0,.06); }
+  .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); display:flex; justify-content:space-between; align-items:center; box-shadow:0 -2px 10px rgba(0,0,0,.06); }
   .cart-bar .n{ font-size:14px; line-height:1.4; }
   .cart-bar .n b{ color:var(--gold-d); font-size:16px; }
   .cart-bar button{ background:var(--gold); color:var(--ink); border:none; padding:13px 26px; border-radius:10px; font-size:16px; font-weight:700; }
@@ -55,18 +57,20 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>🎨 瑀墨塗料 — 線上叫貨</h1>
-  <div class="sub" id="who">驗證中…</div>
-</header>
+<div class="topbar">
+  <header>
+    <h1>🎨 瑀墨塗料 — 線上叫貨</h1>
+    <div class="sub" id="who">驗證中…</div>
+  </header>
+  <div class="toolbar" id="toolbar" style="display:none">
+    <div class="search"><input id="q" placeholder="🔍 搜尋品名 / 品牌（例：乳膠漆、虹牌）" /></div>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
 
 <div id="loading">載入中…</div>
 
 <div id="main" style="display:none">
-  <div class="toolbar">
-    <div class="search"><input id="q" placeholder="🔍 搜尋品名 / 品牌（例：乳膠漆、虹牌）" /></div>
-    <div class="chips" id="chips"></div>
-  </div>
   <div class="wrap">
     <div id="lastBox"></div>
     <div class="count" id="count"></div>
@@ -87,7 +91,7 @@ var curBrand = "", curSearch = "";
 
 function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },2000); }
 function H(){ return {'X-Line-IdToken': idToken}; }
-function showError(msg){ var l=document.getElementById('loading'); l.textContent=msg; l.style.display='block'; document.getElementById('main').style.display='none'; document.getElementById('cartBar').style.display='none'; }
+function showError(msg){ var l=document.getElementById('loading'); l.textContent=msg; l.style.display='block'; document.getElementById('main').style.display='none'; document.getElementById('toolbar').style.display='none'; document.getElementById('cartBar').style.display='none'; }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function init(){
@@ -103,6 +107,7 @@ async function init(){
     if(!ok) return;
     await loadHistory();
     document.getElementById('loading').style.display = 'none';
+    document.getElementById('toolbar').style.display = 'block';
     document.getElementById('main').style.display = 'block';
     document.getElementById('cartBar').style.display = 'flex';
   }catch(e){
