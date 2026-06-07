@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>瑀墨塗料 — 線上叫貨</title>
 <style>
-  :root{ --navy:#2B5C8A; --gold:#C8A45C; }
+  :root{ --ink:#1b1b1f; --navy:#2B5C8A; --gold:#C8A45C; --gold-d:#a8863f; }
   *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   body{ font-family:"Microsoft JhengHei","PingFang TC","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; background:#f4f6f9; color:#222; padding-bottom:96px; }
-  header{ background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; }
+  header{ background:var(--ink); color:var(--gold); padding:14px 16px; position:sticky; top:0; z-index:20; border-bottom:2px solid var(--gold); }
   header h1{ font-size:18px; }
   header .sub{ font-size:12px; opacity:.85; margin-top:2px; }
 
@@ -18,19 +18,19 @@
   .chips{ display:flex; gap:8px; overflow-x:auto; padding:10px 0 2px; -webkit-overflow-scrolling:touch; }
   .chips::-webkit-scrollbar{ display:none; }
   .chip{ flex:0 0 auto; padding:7px 14px; border:1px solid #ccd3db; border-radius:18px; background:#fff; font-size:14px; color:#555; white-space:nowrap; }
-  .chip.on{ background:var(--navy); color:#fff; border-color:var(--navy); }
+  .chip.on{ background:var(--ink); color:var(--gold); border-color:var(--ink); }
 
   .wrap{ padding:6px 16px 16px; }
   .last-box{ background:#fff8e8; border:1px solid var(--gold); border-radius:10px; padding:12px 14px; margin:6px 0 12px; font-size:13px; line-height:1.7; }
   .last-box .t{ font-weight:700; color:#8a6d2b; margin-bottom:4px; }
-  .last-box button{ margin-top:10px; background:var(--gold); color:#fff; border:none; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; }
+  .last-box button{ margin-top:10px; background:var(--gold); color:var(--ink); border:none; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; }
   .count{ font-size:13px; color:#888; margin:4px 2px 10px; }
 
   /* 商品卡 */
   .item{ background:#fff; border:1px solid #e3e8ee; border-radius:10px; padding:12px 14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .item.picked{ border-color:var(--navy); box-shadow:0 0 0 1px var(--navy) inset; }
+  .item.picked{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
   .item .info{ flex:1; min-width:0; }
-  .item .brand{ display:inline-block; font-size:11px; color:var(--navy); background:#eaf1f8; border-radius:4px; padding:1px 7px; margin-bottom:5px; }
+  .item .brand{ display:inline-block; font-size:11px; color:#8a6d2b; background:#f6efda; border-radius:4px; padding:1px 7px; margin-bottom:5px; }
   .item .nm{ font-size:15px; font-weight:600; line-height:1.45; word-break:break-word; }
   .item .meta{ font-size:12px; color:#888; margin-top:5px; }
   .item .meta b{ color:#555; font-weight:600; }
@@ -38,16 +38,16 @@
   /* 數量控制 */
   .qty{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:0 0 auto; }
   .qrow{ display:flex; align-items:center; gap:10px; }
-  .qty button{ width:38px; height:38px; border:none; border-radius:9px; background:var(--navy); color:#fff; font-size:22px; line-height:1; font-weight:600; }
+  .qty button{ width:38px; height:38px; border:none; border-radius:9px; background:var(--ink); color:#fff; font-size:22px; line-height:1; font-weight:600; }
   .qty button:active{ opacity:.7; }
   .qty .num{ min-width:30px; text-align:center; font-size:18px; font-weight:700; }
   .qty .unit{ font-size:11px; color:#999; }
 
   .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -2px 10px rgba(0,0,0,.06); }
   .cart-bar .n{ font-size:14px; line-height:1.4; }
-  .cart-bar .n b{ color:var(--navy); font-size:16px; }
-  .cart-bar button{ background:var(--navy); color:#fff; border:none; padding:13px 26px; border-radius:10px; font-size:16px; font-weight:700; }
-  .cart-bar button:disabled{ background:#aab2bd; }
+  .cart-bar .n b{ color:var(--gold-d); font-size:16px; }
+  .cart-bar button{ background:var(--gold); color:var(--ink); border:none; padding:13px 26px; border-radius:10px; font-size:16px; font-weight:700; }
+  .cart-bar button:disabled{ background:#d8d2c4; color:#8a8472; }
   .empty{ text-align:center; color:#999; padding:40px 20px; font-size:14px; }
   #loading{ text-align:center; padding:60px 20px; color:#777; }
   .toast{ position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
