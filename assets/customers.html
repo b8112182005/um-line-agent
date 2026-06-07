@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>瑀墨 — 客戶管理</title>
+<style>
+  :root{ --navy:#2B5C8A; --gold:#C8A45C; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body{ font-family:"Microsoft JhengHei","PingFang TC",sans-serif; background:#f4f6f9; color:#222; padding-bottom:24px; }
+  header{ background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; }
+  header h1{ font-size:18px; }
+  .toolbar{ position:sticky; top:52px; z-index:15; background:#f4f6f9; padding:10px 16px 6px; }
+  .search input{ width:100%; padding:12px 14px; border:1px solid #ccd3db; border-radius:10px; font-size:16px; }
+  .tabs{ display:flex; gap:8px; margin-top:10px; }
+  .tab{ flex:1; text-align:center; padding:10px; border:1px solid #ccd3db; border-radius:10px; background:#fff; font-size:15px; color:#555; }
+  .tab.on{ background:var(--navy); color:#fff; border-color:var(--navy); font-weight:600; }
+  .wrap{ padding:8px 16px 16px; }
+  .item{ background:#fff; border:1px solid #e3e8ee; border-radius:10px; padding:12px 14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .item .nm{ font-size:16px; font-weight:600; word-break:break-word; }
+  .item .tag{ display:inline-block; font-size:11px; border-radius:4px; padding:1px 7px; margin-top:5px; }
+  .tag.vip{ color:#8a6d2b; background:#fff3d6; }
+  .tag.reg{ color:#666; background:#eef1f4; }
+  .item .note{ font-size:12px; color:#999; margin-top:4px; }
+  .btn{ flex:0 0 auto; border:none; border-radius:9px; padding:11px 16px; font-size:14px; font-weight:600; color:#fff; }
+  .btn.up{ background:var(--gold); }
+  .btn.down{ background:#9aa4b0; }
+  .empty{ text-align:center; color:#999; padding:40px 20px; font-size:14px; }
+  .more{ display:block; width:100%; padding:12px; border:1px dashed #bbc4cd; background:#fff; border-radius:10px; color:var(--navy); font-size:15px; margin-top:4px; }
+  #loading{ text-align:center; padding:50px 20px; color:#777; }
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
+  .toast.show{ opacity:.95; }
+</style>
+</head>
+<body>
+<header><h1>👥 瑀墨 — 客戶管理</h1></header>
+
+<div id="loading">載入中…</div>
+
+<div id="main" style="display:none">
+  <div class="toolbar">
+    <div class="search"><input id="q" placeholder="🔍 搜尋客戶名稱" /></div>
+    <div class="tabs">
+      <div class="tab on" id="tabVip" onclick="switchTab('approved')">🌟 熟客 <span id="cVip">0</span></div>
+      <div class="tab" id="tabReg" onclick="switchTab('pending')">👤 非熟客 <span id="cReg">0</span></div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div id="list"></div>
+    <button class="more" id="moreBtn" style="display:none" onclick="loadMore()">載入更多 ⌄</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var TOKEN = new URLSearchParams(location.search).get('t') || '';
+var status = 'approved', search = '', offset = 0, items = [], hasMore = false, busy = false;
+var _t;
+
+function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },2000); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showError(m){ var l=document.getElementById('loading'); l.textContent=m; l.style.display='block'; document.getElementById('main').style.display='none'; }
+
+async function api(path, opts){
+  var sep = path.indexOf('?')>=0 ? '&' : '?';
+  return fetch(path + sep + 't=' + encodeURIComponent(TOKEN), opts);
+}
+
+async function load(reset){
+  if(busy) return; busy = true;
+  if(reset){ offset = 0; items = []; }
+  try{
+    var r = await api('/staff/customers?status=' + status + '&search=' + encodeURIComponent(search) + '&offset=' + offset);
+    if(r.status === 401 || r.status === 403){ var d=await r.json(); showError(d.detail || '連結已失效'); return; }
+    if(!r.ok){ toast('載入失敗'); return; }
+    var d = await r.json();
+    document.getElementById('cVip').textContent = d.counts.approved;
+    document.getElementById('cReg').textContent = d.counts.pending;
+    items = items.concat(d.items);
+    hasMore = d.has_more;
+    offset += d.items.length;
+    render();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+  }catch(e){ showError('載入失敗：' + (e.message||e)); }
+  finally{ busy = false; }
+}
+
+function loadMore(){ load(false); }
+
+function switchTab(s){
+  if(status === s) return;
+  status = s;
+  document.getElementById('tabVip').classList.toggle('on', s==='approved');
+  document.getElementById('tabReg').classList.toggle('on', s==='pending');
+  load(true);
+}
+
+document.addEventListener('input', function(e){
+  if(e.target.id === 'q'){ clearTimeout(_t); _t = setTimeout(function(){ search = e.target.value.trim(); load(true); }, 250); }
+});
+
+function render(){
+  var list = document.getElementById('list');
+  if(!items.length){ list.innerHTML = '<div class="empty">沒有符合的客戶</div>'; document.getElementById('moreBtn').style.display='none'; return; }
+  list.innerHTML = items.map(function(u){
+    var isVip = u.role === 'approved';
+    var tag = isVip ? '<span class="tag vip">🌟 熟客</span>' : '<span class="tag reg">👤 非熟客</span>';
+    var note = u.note ? '<div class="note">' + esc(u.note) + '</div>' : '';
+    var btn = isVip
+      ? '<button class="btn down" onclick="setRole(\'' + u.user_id + '\',\'demote\',this)">取消熟客</button>'
+      : '<button class="btn up" onclick="setRole(\'' + u.user_id + '\',\'approve\',this)">設為熟客</button>';
+    return '<div class="item"><div><div class="nm">' + esc(u.name) + '</div>' + tag + note + '</div>' + btn + '</div>';
+  }).join('');
+  document.getElementById('moreBtn').style.display = hasMore ? 'block' : 'none';
+}
+
+async function setRole(uid, action, el){
+  el.disabled = true; el.textContent = '處理中…';
+  try{
+    var r = await api('/staff/customers/role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: uid, action: action })
+    });
+    var d = await r.json();
+    if(r.ok){
+      toast(action === 'approve' ? '已設為熟客 🌟' : '已取消熟客');
+      load(true);  // 重整目前分頁與計數
+    }else{
+      toast(d.detail || '操作失敗'); el.disabled = false;
+      el.textContent = action === 'approve' ? '設為熟客' : '取消熟客';
+    }
+  }catch(e){ toast('操作失敗'); el.disabled = false; }
+}
+
+if(!TOKEN){ showError('連結無效，請回 LINE 打「客戶名單」取得連結'); }
+else{ load(true); }
+</script>
+</body>
+</html>

@@ -14,6 +14,9 @@ LINE_ENGINEER_USER_ID = os.getenv("LINE_ENGINEER_USER_ID", "U75c9e5c51324a7867cb
 LIFF_ID = os.getenv("LIFF_ID", "")                              # LIFF app ID（前端 liff.init 用）
 LINE_LOGIN_CHANNEL_ID = os.getenv("LINE_LOGIN_CHANNEL_ID", "")  # 驗證 idToken 的 client_id（= 瑀墨助理 channel ID）
 
+# === 對外網址（客戶管理頁簽章連結用）===
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://um-line-agent-production.up.railway.app").rstrip("/")
+
 # === 白名單（逗號分隔的 LINE User ID）===
 BOSS_USER_IDS = [
     uid.strip()

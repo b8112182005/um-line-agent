@@ -193,6 +193,38 @@ def remove_user(user_id: str) -> bool:
     return cur.rowcount > 0
 
 
+def list_customers(role: str = "", search: str = "", limit: int = 30, offset: int = 0) -> list[dict]:
+    """分頁查客戶（排除 boss/engineer）。role 空=全部客戶身分；search 模糊比對暱稱。"""
+    conds = ["role NOT IN ('boss','engineer')"]
+    params: list = []
+    if role:
+        conds.append("role = ?"); params.append(role)
+    if search:
+        conds.append("display_name LIKE ?"); params.append(f"%{search}%")
+    where = " AND ".join(conds)
+    with _conn() as conn:
+        rows = conn.execute(
+            f"SELECT line_user_id, display_name, role, note, created_at FROM users "
+            f"WHERE {where} ORDER BY display_name LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+    return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or "", "created_at": r[4]} for r in rows]
+
+
+def count_customers(role: str = "", search: str = "") -> int:
+    """計數（排除 boss/engineer），條件同 list_customers。"""
+    conds = ["role NOT IN ('boss','engineer')"]
+    params: list = []
+    if role:
+        conds.append("role = ?"); params.append(role)
+    if search:
+        conds.append("display_name LIKE ?"); params.append(f"%{search}%")
+    where = " AND ".join(conds)
+    with _conn() as conn:
+        row = conn.execute(f"SELECT COUNT(*) FROM users WHERE {where}", params).fetchone()
+    return row[0] if row else 0
+
+
 def find_user_by_name(name: str) -> list[dict]:
     """用暱稱模糊搜尋用戶"""
     with _conn() as conn:

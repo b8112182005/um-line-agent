@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID, LIFF_ID
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID, LIFF_ID, PUBLIC_BASE_URL
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
 from user_db import (
     init_db, get_role, add_pending, set_role,
@@ -17,6 +17,7 @@ from user_db import (
 )
 from push import leave_group
 from liff_api import router as liff_router
+from customer_admin import router as staff_router, make_token
 
 import httpx
 from fastapi.responses import FileResponse
@@ -71,12 +72,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="瑀墨助理", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 app.include_router(liff_router)
+app.include_router(staff_router)
 
 
 @app.get("/order", include_in_schema=False)
 async def order_page():
     """LIFF 線上叫貨表單頁"""
     return FileResponse("assets/order.html")
+
+
+@app.get("/customers", include_in_schema=False)
+async def customers_page():
+    """客戶管理頁（內部人員，以簽章連結 ?t= 存取）"""
+    return FileResponse("assets/customers.html")
 
 
 # 僅供本機開發在「明確設定」時放行未簽章請求；正式環境一律 fail-closed
@@ -329,16 +337,17 @@ async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool
             await reply_line(reply_token, f"✅ 已取消「{tname}」的熟客身分。")
         return True
 
-    # 客戶名單：列出熟客 / 非熟客
-    if text in ("客戶名單", "名單"):
-        vips = list_approved()
-        regs = list_pending()
-        lines = ["📋 客戶名單", "", "🌟 熟客（可線上備料）："]
-        lines += ([f"　• {u['display_name'] or '(未命名)'}" for u in vips] if vips else ["　（目前沒有熟客）"])
-        lines += ["", "👤 非熟客："]
-        lines += ([f"　• {u['display_name'] or '(未命名)'}" for u in regs] if regs else ["　（目前沒有非熟客）"])
-        lines += ["", "設為熟客請打：「○○○是熟客」"]
-        await reply_line(reply_token, "\n".join(lines))
+    # 客戶名單：回客戶管理頁簽章連結（搜尋/分頁/一鍵設熟客），量大也不爆
+    if text in ("客戶名單", "名單", "客戶管理"):
+        vip_n = len(list_approved())
+        reg_n = len(list_pending())
+        url = f"{PUBLIC_BASE_URL}/customers?t={make_token(user_id)}"
+        await reply_line(
+            reply_token,
+            f"👥 客戶管理\n🌟 熟客 {vip_n} 位｜👤 非熟客 {reg_n} 位\n\n"
+            f"點此開啟管理頁（可搜尋、設/取消熟客）👇\n{url}\n\n"
+            f"（連結 2 小時內有效；也可直接打「○○○是熟客」快速設定）"
+        )
         return True
 
     # 設為熟客：「○○○是熟客」→ 兩步確認第一步
