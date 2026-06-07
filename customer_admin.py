@@ -14,7 +14,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 
 from config import LINE_CHANNEL_SECRET
-from user_db import get_role, list_customers, count_customers, set_role
+from user_db import get_role, list_customers, count_customers, set_role, set_note
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/staff", tags=["客戶管理"])
@@ -95,3 +95,16 @@ async def set_customer_role(request: Request):
     except Exception as e:
         logger.warning(f"設身分後切換選單失敗：{e}")
     return {"ok": True, "role": new_role}
+
+
+@router.post("/customers/note")
+async def set_customer_note(request: Request):
+    """設定客戶備註（標真實姓名/公司/電話）。body: {user_id, note}。"""
+    _auth(request)
+    body = await request.json()
+    target = body.get("user_id", "")
+    note = (body.get("note") or "").strip()[:200]
+    if not target:
+        raise HTTPException(status_code=400, detail="參數錯誤")
+    set_note(target, note)
+    return {"ok": True, "note": note}

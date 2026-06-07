@@ -3,6 +3,7 @@ import hmac
 import base64
 import logging
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -12,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID, LIFF_ID, PUBLIC_BASE_URL
 from customer import MENU_RESPONSES, handle_customer, handle_staff, handle_image, handle_audio
 from user_db import (
-    init_db, get_role, add_pending, set_role,
+    init_db, get_role, add_pending, set_role, update_name,
     list_approved, list_pending, find_user_by_name, get_setting, set_setting,
 )
 from push import leave_group
@@ -261,6 +262,16 @@ async def get_line_profile(user_id: str) -> str:
     return ""
 
 
+async def _refresh_name(user_id: str):
+    """背景把 DB 暱稱更新成 LINE 最新值（失敗不影響主流程）。"""
+    try:
+        name = await get_line_profile(user_id)
+        if name and update_name(user_id, name):
+            logger.info(f"暱稱已更新：{user_id[:8]} → {name}")
+    except Exception as e:
+        logger.warning(f"更新暱稱失敗：{e}")
+
+
 async def _bind_rich_menu(menu_id: str, user_id: str) -> bool:
     """綁定 Rich Menu 到指定用戶（LINE linkRichMenuIdToUser）。回傳是否成功。
     注意：POST 需帶 Content-Length: 0（httpx 對無 body POST 會自動帶）。"""
@@ -479,6 +490,9 @@ async def callback(request: Request):
             user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
             or role in ("boss", "engineer")
         )
+        # 客戶傳訊息時，背景把暱稱更新成最新（不阻塞回覆）
+        if not is_staff:
+            asyncio.create_task(_refresh_name(user_id))
         # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
         sim_mode = _staff_mode.get(user_id) if is_staff else None
 

@@ -173,6 +173,19 @@ def list_all_users() -> list[dict]:
     return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or "", "created_at": r[4]} for r in rows]
 
 
+def update_name(user_id: str, name: str) -> bool:
+    """更新暱稱（僅在用戶已存在、name 非空且有變動時）。回傳是否有更新。"""
+    if not name:
+        return False
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE users SET display_name = ? WHERE line_user_id = ? AND display_name != ?",
+            (name, user_id, name),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
 def set_note(user_id: str, note: str):
     """設定用戶備註"""
     with _conn() as conn:
