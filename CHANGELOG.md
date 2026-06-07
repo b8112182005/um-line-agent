@@ -1,5 +1,18 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-07 — 客戶管理頁（解決客戶量大名單爆訊息）
+
+### 新增
+- `customer_admin.py`：內部人員（boss/engineer）客戶管理 BFF。以 HMAC 簽章短效連結（2h，`LINE_CHANNEL_SECRET`）授權，不走 LIFF。
+  - `GET /staff/customers`：分頁+搜尋+熟客/非熟客計數
+  - `POST /staff/customers/role`：一鍵設/取消熟客（同步切該客戶 rich menu）
+- `assets/customers.html`：搜尋框 + 熟客/非熟客分頁籤 + 卡片 + 載入更多。
+- `user_db`：`list_customers` / `count_customers`（分頁+搜尋，排除內部人員）。
+- `config`：`PUBLIC_BASE_URL`。
+
+### 變更
+- 「客戶名單／名單／客戶管理」指令：由「整包列出所有人」改為回**人數摘要 + 管理頁簽章連結**，客戶量大也不會超過 LINE 訊息上限。文字「○○○是熟客／取消熟客」仍保留。
+
 ## 2026-06-07 — 線上備料上線除錯 + 表單版面重整
 
 ### 修復
