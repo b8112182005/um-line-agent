@@ -6,29 +6,51 @@
 <title>瑀墨塗料 — 線上叫貨</title>
 <style>
   :root{ --navy:#2B5C8A; --gold:#C8A45C; }
-  *{ box-sizing:border-box; margin:0; padding:0; }
-  body{ font-family:"Microsoft JhengHei",sans-serif; background:#f4f6f9; color:#222; padding-bottom:92px; }
-  header{ background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:10; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body{ font-family:"Microsoft JhengHei","PingFang TC",sans-serif; background:#f4f6f9; color:#222; padding-bottom:96px; }
+  header{ background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; }
   header h1{ font-size:18px; }
   header .sub{ font-size:12px; opacity:.85; margin-top:2px; }
-  .wrap{ padding:12px 16px; }
-  .search input{ width:100%; padding:11px; border:1px solid #ccc; border-radius:8px; font-size:15px; margin-bottom:10px; }
-  .last-box{ background:#fff8e8; border:1px solid var(--gold); border-radius:8px; padding:10px 12px; margin-bottom:10px; font-size:13px; line-height:1.7; }
-  .last-box button{ margin-top:8px; background:var(--gold); color:#fff; border:none; padding:7px 14px; border-radius:6px; font-size:13px; }
-  .item{ background:#fff; border:1px solid #e3e8ee; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
-  .item .info{ flex:1; padding-right:8px; }
-  .item .nm{ font-size:14px; font-weight:600; }
-  .item .meta{ font-size:12px; color:#777; margin-top:2px; }
-  .qty{ display:flex; align-items:center; gap:8px; }
-  .qty button{ width:32px; height:32px; border:none; border-radius:6px; background:var(--navy); color:#fff; font-size:18px; line-height:1; }
-  .qty span{ min-width:26px; text-align:center; font-size:16px; }
-  .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }
-  .cart-bar .n{ font-size:14px; }
-  .cart-bar button{ background:var(--navy); color:#fff; border:none; padding:12px 22px; border-radius:8px; font-size:16px; font-weight:600; }
+
+  /* 搜尋 + 品牌快篩（吸頂） */
+  .toolbar{ position:sticky; top:54px; z-index:15; background:#f4f6f9; padding:10px 16px 6px; }
+  .search input{ width:100%; padding:12px 14px; border:1px solid #ccd3db; border-radius:10px; font-size:16px; }
+  .chips{ display:flex; gap:8px; overflow-x:auto; padding:10px 0 2px; -webkit-overflow-scrolling:touch; }
+  .chips::-webkit-scrollbar{ display:none; }
+  .chip{ flex:0 0 auto; padding:7px 14px; border:1px solid #ccd3db; border-radius:18px; background:#fff; font-size:14px; color:#555; white-space:nowrap; }
+  .chip.on{ background:var(--navy); color:#fff; border-color:var(--navy); }
+
+  .wrap{ padding:6px 16px 16px; }
+  .last-box{ background:#fff8e8; border:1px solid var(--gold); border-radius:10px; padding:12px 14px; margin:6px 0 12px; font-size:13px; line-height:1.7; }
+  .last-box .t{ font-weight:700; color:#8a6d2b; margin-bottom:4px; }
+  .last-box button{ margin-top:10px; background:var(--gold); color:#fff; border:none; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; }
+  .count{ font-size:13px; color:#888; margin:4px 2px 10px; }
+
+  /* 商品卡 */
+  .item{ background:#fff; border:1px solid #e3e8ee; border-radius:10px; padding:12px 14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .item.picked{ border-color:var(--navy); box-shadow:0 0 0 1px var(--navy) inset; }
+  .item .info{ flex:1; min-width:0; }
+  .item .brand{ display:inline-block; font-size:11px; color:var(--navy); background:#eaf1f8; border-radius:4px; padding:1px 7px; margin-bottom:5px; }
+  .item .nm{ font-size:15px; font-weight:600; line-height:1.45; word-break:break-word; }
+  .item .meta{ font-size:12px; color:#888; margin-top:5px; }
+  .item .meta b{ color:#555; font-weight:600; }
+
+  /* 數量控制 */
+  .qty{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:0 0 auto; }
+  .qrow{ display:flex; align-items:center; gap:10px; }
+  .qty button{ width:38px; height:38px; border:none; border-radius:9px; background:var(--navy); color:#fff; font-size:22px; line-height:1; font-weight:600; }
+  .qty button:active{ opacity:.7; }
+  .qty .num{ min-width:30px; text-align:center; font-size:18px; font-weight:700; }
+  .qty .unit{ font-size:11px; color:#999; }
+
+  .cart-bar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #ddd; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -2px 10px rgba(0,0,0,.06); }
+  .cart-bar .n{ font-size:14px; line-height:1.4; }
+  .cart-bar .n b{ color:var(--navy); font-size:16px; }
+  .cart-bar button{ background:var(--navy); color:#fff; border:none; padding:13px 26px; border-radius:10px; font-size:16px; font-weight:700; }
   .cart-bar button:disabled{ background:#aab2bd; }
-  .empty{ text-align:center; color:#999; padding:30px; font-size:14px; }
-  #loading{ text-align:center; padding:50px 20px; color:#777; }
-  .toast{ position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; }
+  .empty{ text-align:center; color:#999; padding:40px 20px; font-size:14px; }
+  #loading{ text-align:center; padding:60px 20px; color:#777; }
+  .toast{ position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
   .toast.show{ opacity:.95; }
 </style>
 </head>
@@ -37,12 +59,21 @@
   <h1>🎨 瑀墨塗料 — 線上叫貨</h1>
   <div class="sub" id="who">驗證中…</div>
 </header>
+
 <div id="loading">載入中…</div>
-<div class="wrap" id="main" style="display:none">
-  <div id="lastBox"></div>
-  <div class="search"><input id="q" placeholder="搜尋品名（例：乳膠漆、底漆）" /></div>
-  <div id="list"></div>
+
+<div id="main" style="display:none">
+  <div class="toolbar">
+    <div class="search"><input id="q" placeholder="🔍 搜尋品名 / 品牌（例：乳膠漆、虹牌）" /></div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="wrap">
+    <div id="lastBox"></div>
+    <div class="count" id="count"></div>
+    <div id="list"></div>
+  </div>
 </div>
+
 <div class="cart-bar" id="cartBar" style="display:none">
   <div class="n" id="cartN">尚未選購</div>
   <button id="submitBtn" disabled onclick="submitOrder()">送出叫貨</button>
@@ -51,22 +82,25 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-var idToken = "", cart = {}, catalog = [], lastItems = [];
+var idToken = "", cart = {}, allCatalog = [], catalog = [], lastItems = [];
+var curBrand = "", curSearch = "";
 
 function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },2000); }
 function H(){ return {'X-Line-IdToken': idToken}; }
 function showError(msg){ var l=document.getElementById('loading'); l.textContent=msg; l.style.display='block'; document.getElementById('main').style.display='none'; document.getElementById('cartBar').style.display='none'; }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function init(){
   try{
     var cfg = await (await fetch('/liff/config')).json();
-    if(!cfg.liff_id){ showError('系統尚未設定 LIFF ID，請通知管理員'); return; }
+    if(!cfg.liff_id){ showError('系統尚未設定，請通知管理員'); return; }
     await liff.init({ liffId: cfg.liff_id });
     if(!liff.isLoggedIn()){ liff.login(); return; }
     idToken = liff.getIDToken();
     var prof = await liff.getProfile();
     document.getElementById('who').textContent = '熟客：' + prof.displayName;
-    await loadCatalog('');
+    var ok = await loadCatalog();
+    if(!ok) return;
     await loadHistory();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('main').style.display = 'block';
@@ -76,16 +110,45 @@ async function init(){
   }
 }
 
+async function loadCatalog(){
+  var r = await fetch('/liff/catalog', { headers: H() });
+  if(r.status === 403){ showError('此功能限熟客使用，請洽專員開通'); return false; }
+  if(!r.ok){ showError('載入品項失敗，請稍後再試或通知專員'); return false; }
+  allCatalog = await r.json();
+  buildChips();
+  applyFilter();
+  return true;
+}
+
+function buildChips(){
+  var seen = {}, brands = [];
+  allCatalog.forEach(function(p){ var b=(p.brand||'其他').trim()||'其他'; if(!seen[b]){ seen[b]=1; brands.push(b); } });
+  var box = document.getElementById('chips');
+  var html = '<div class="chip on" data-b="" onclick="pickBrand(this,\'\')">全部</div>';
+  html += brands.map(function(b){ return '<div class="chip" data-b="'+esc(b)+'" onclick="pickBrand(this,\''+esc(b).replace(/'/g,"\\'")+'\')">'+esc(b)+'</div>'; }).join('');
+  box.innerHTML = html;
+}
+
+function pickBrand(el, b){
+  curBrand = b;
+  var chips = document.querySelectorAll('.chip');
+  for(var i=0;i<chips.length;i++) chips[i].classList.remove('on');
+  el.classList.add('on');
+  applyFilter();
+}
+
 var _t;
 document.addEventListener('input', function(e){
-  if(e.target.id === 'q'){ clearTimeout(_t); _t = setTimeout(function(){ loadCatalog(e.target.value); }, 300); }
+  if(e.target.id === 'q'){ clearTimeout(_t); _t = setTimeout(function(){ curSearch = e.target.value.trim(); applyFilter(); }, 200); }
 });
 
-async function loadCatalog(s){
-  var r = await fetch('/liff/catalog?search=' + encodeURIComponent(s), { headers: H() });
-  if(r.status === 403){ showError('此功能限熟客使用，請洽專員開通'); return; }
-  if(!r.ok){ toast('載入品項失敗'); return; }
-  catalog = await r.json();
+function applyFilter(){
+  var s = curSearch.toLowerCase();
+  catalog = allCatalog.filter(function(p){
+    if(curBrand && (p.brand||'其他').trim() !== curBrand) return false;
+    if(!s) return true;
+    return ((p.brand||'')+' '+(p.name||'')+' '+(p.color_name||'')).toLowerCase().indexOf(s) >= 0;
+  });
   render();
 }
 
@@ -98,9 +161,9 @@ async function loadHistory(){
       lastItems = d.items;
       var box = document.getElementById('lastBox');
       box.className = 'last-box';
-      box.innerHTML = '📋 上次您訂的（' + (d.date || '') + '）：<br>' +
-        d.items.map(function(it){ return '· ' + it.product_name + ' x' + it.quantity + (it.unit||''); }).join('<br>') +
-        '<br><button onclick="fillLast()">一鍵帶入上次</button>';
+      box.innerHTML = '<div class="t">📋 上次您訂的'+(d.date?'（'+esc(d.date)+'）':'')+'</div>' +
+        d.items.map(function(it){ return '· ' + esc(it.product_name) + ' ×' + it.quantity + esc(it.unit||''); }).join('<br>') +
+        '<br><button onclick="fillLast()">一鍵帶入上次品項</button>';
     }
   }catch(e){}
 }
@@ -114,33 +177,46 @@ function fillLast(){
 
 function render(){
   var list = document.getElementById('list');
-  if(!catalog.length){ list.innerHTML = '<div class="empty">找不到品項</div>'; return; }
+  document.getElementById('count').textContent = '共 ' + catalog.length + ' 項' + (curBrand ? '（'+curBrand+'）' : '');
+  if(!catalog.length){ list.innerHTML = '<div class="empty">找不到品項<br>試試其他關鍵字或品牌</div>'; return; }
   list.innerHTML = catalog.map(function(p){
     var q = cart[p.id] ? cart[p.id].quantity : 0;
-    var nm = (p.brand ? p.brand + ' ' : '') + p.name + (p.color_name ? '（' + p.color_name + '）' : '');
-    return '<div class="item"><div class="info"><div class="nm">' + nm + '</div>' +
-      '<div class="meta">' + (p.spec || '') + '　' + (p.unit||'') + '</div></div>' +
-      '<div class="qty"><button onclick="chg(' + p.id + ',-1)">−</button>' +
-      '<span id="q' + p.id + '">' + q + '</span>' +
-      '<button onclick="chg(' + p.id + ',1)">＋</button></div></div>';
+    var brand = esc(p.brand || '');
+    var nm = esc(p.name) + (p.color_name ? '（' + esc(p.color_name) + '）' : '');
+    var metaParts = [];
+    if(p.spec) metaParts.push(esc(p.spec));
+    metaParts.push('單位：<b>' + esc(p.unit || '個') + '</b>');
+    return '<div class="item' + (q>0?' picked':'') + '" id="it' + p.id + '">' +
+      '<div class="info">' +
+        (brand ? '<span class="brand">' + brand + '</span>' : '') +
+        '<div class="nm">' + nm + '</div>' +
+        '<div class="meta">' + metaParts.join('　') + '</div>' +
+      '</div>' +
+      '<div class="qty"><div class="qrow">' +
+        '<button onclick="chg(' + p.id + ',-1)">−</button>' +
+        '<span class="num" id="q' + p.id + '">' + q + '</span>' +
+        '<button onclick="chg(' + p.id + ',1)">＋</button>' +
+      '</div><span class="unit">' + esc(p.unit || '') + '</span></div>' +
+    '</div>';
   }).join('');
 }
 
 function chg(id, d){
-  var p = catalog.find(function(x){ return x.id === id; });
+  var p = allCatalog.find(function(x){ return x.id === id; });
   if(!p) return;
   var cur = cart[id] ? cart[id].quantity : 0;
   cur = Math.max(0, cur + d);
   if(cur === 0){ delete cart[id]; }
   else{ cart[id] = { product_id: id, product_name: (p.brand ? p.brand + ' ' : '') + p.name + (p.color_name ? '（' + p.color_name + '）' : ''), unit: p.unit, quantity: cur }; }
   var el = document.getElementById('q' + id); if(el) el.textContent = cur;
+  var card = document.getElementById('it' + id); if(card){ if(cur>0) card.classList.add('picked'); else card.classList.remove('picked'); }
   updateCart();
 }
 
 function updateCart(){
   var ids = Object.keys(cart);
   var tot = ids.reduce(function(s,k){ return s + cart[k].quantity; }, 0);
-  document.getElementById('cartN').textContent = ids.length ? ('已選 ' + ids.length + ' 項 / 共 ' + tot + ' 件') : '尚未選購';
+  document.getElementById('cartN').innerHTML = ids.length ? ('已選 <b>' + ids.length + '</b> 項 / 共 <b>' + tot + '</b> 件') : '尚未選購';
   document.getElementById('submitBtn').disabled = !ids.length;
 }
 
