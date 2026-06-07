@@ -116,11 +116,25 @@ async def submit_order(request: Request):
     result = await wms_post("/api/orders/pending", json=payload)
     order_number = result.get("order_number", "")
 
-    # 通知老闆（塗料部門）
-    summary = "、".join(f"{it['product_name']}x{int(it['quantity'])}" for it in clean_items[:5])
-    if len(clean_items) > 5:
-        summary += f" 等 {len(clean_items)} 項"
-    notify_text = f"🛒 新線上叫貨單 {order_number}\n熟客：{user['name']}\n品項：{summary}\n請到 WMS 後台確認。"
+    # 通知老闆（塗料部門）+ 工程師：一筆一行、編號、含數量單位，方便閱讀
+    def _qty(n):
+        n = float(n)
+        return str(int(n)) if n == int(n) else str(n)
+    lines = [
+        f"{i}. {it['product_name']}　{_qty(it['quantity'])}{it.get('unit', '')}".rstrip()
+        for i, it in enumerate(clean_items, 1)
+    ]
+    total_qty = sum(float(it["quantity"]) for it in clean_items)
+    notify_text = (
+        "🛒 新線上叫貨單\n"
+        f"單號：{order_number}\n"
+        f"熟客：{user['name']}\n"
+        "━━━━━━━━━━\n"
+        + "\n".join(lines) + "\n"
+        "━━━━━━━━━━\n"
+        f"共 {len(clean_items)} 項 / {_qty(total_qty)} 件\n"
+        "👉 請到 WMS 後台確認出貨"
+    )
     for boss_id in (LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID):
         if not boss_id:
             continue
