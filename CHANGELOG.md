@@ -1,5 +1,16 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-07 — 線上備料上線除錯 + 表單版面重整
+
+### 修復
+- 切模式選單沒換：`_bind_rich_menu` 對失效 menu_id 綁定 404 靜默失敗。改 bind 回 bool + `_switch_menu` 自我修復（清快取重抓），審核熟客/follow/切模式三處統一走它。
+- LIFF 點開變官網：LINE Login channel(2010310048) 未發佈（HT 已發佈）；endpoint 經查正確為 /order。
+- 表單空無商品：bot 連 WMS 帳密錯。改用 engineer `HTfoder`（UM-KENYA 密碼已失效），設入 Railway + .env，實測查得 525 筆。
+
+### 變更
+- 熟客選單「線上備料」由 message 改 uri，一鍵直開 LIFF 下單表單（避免兩段式/按錯鄰格作品集）。
+- 下單表單(`assets/order.html`)版面重整：品牌標籤化、品名 word-break 不爆版、吸頂搜尋列 + 品牌快篩 chips（前端即時篩選）、加大數量鈕、已選高亮、底部選購摘要。
+
 ## 2026-06-07 — 模式切換新增「熟客模式」（三態）
 
 ### 變更
