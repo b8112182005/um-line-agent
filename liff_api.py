@@ -106,11 +106,17 @@ async def submit_order(request: Request):
     if not clean_items:
         raise HTTPException(status_code=400, detail="品項數量需大於 0")
 
+    pickup = body.get("delivery_method", "")  # '自取' or '公司代送'
+    site = body.get("site_address", "")
     payload = {
         "line_user_id": user["user_id"],
         "customer_name": user["name"],
         "phone": body.get("phone", ""),
         "note": body.get("note", ""),
+        "site_address": site,
+        "delivery_address": site,
+        "delivery_method": pickup,
+        "sales_person": body.get("sales_person", ""),
         "items": clean_items,
     }
     result = await wms_post("/api/orders/pending", json=payload)
@@ -125,15 +131,22 @@ async def submit_order(request: Request):
         for i, it in enumerate(clean_items, 1)
     ]
     total_qty = sum(float(it["quantity"]) for it in clean_items)
+    pickup_label = "自取" if pickup == "自取" else "送到案場"
+    extra = f"取貨：{pickup_label}"
+    if site:
+        extra += f"\n案場：{site}"
+    if payload["sales_person"]:
+        extra += f"\n承辦：{payload['sales_person']}"
     notify_text = (
         "🛒 新線上叫貨單\n"
         f"單號：{order_number}\n"
         f"熟客：{user['name']}\n"
+        f"{extra}\n"
         "━━━━━━━━━━\n"
         + "\n".join(lines) + "\n"
         "━━━━━━━━━━\n"
         f"共 {len(clean_items)} 項 / {_qty(total_qty)} 件\n"
-        "👉 請到 WMS 後台確認出貨"
+        "👉 請到 WMS 後台放行出貨"
     )
     for boss_id in (LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID):
         if not boss_id:
@@ -143,4 +156,20 @@ async def submit_order(request: Request):
         except Exception as e:
             logger.error(f"通知 {boss_id[:8]} 失敗：{e}")
 
-    return {"order_number": order_number, "message": "訂單已送出，專員確認後會與您聯繫"}
+    # 下單回條（無金額）推給熟客本人，讓他有憑據
+    receipt = (
+        "✅ 已收到您的叫貨單\n"
+        f"單號：{order_number}\n"
+        f"{extra}\n"
+        "━━━━━━━━━━\n"
+        + "\n".join(lines) + "\n"
+        "━━━━━━━━━━\n"
+        f"共 {len(clean_items)} 項 / {_qty(total_qty)} 件\n"
+        "💰 金額另計，專員確認後會與您聯繫。"
+    )
+    try:
+        await push_message(user["user_id"], receipt)
+    except Exception as e:
+        logger.error(f"回條推播失敗 {user['user_id'][:8]}：{e}")
+
+    return {"order_number": order_number, "message": "訂單已送出，回條已傳到您的聊天室"}

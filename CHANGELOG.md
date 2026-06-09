@@ -1,5 +1,17 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-09 — 內部模式接線 + 線上備料案場欄位 + 下單回條
+
+### 新增
+- `staff_query.py`：內部人員打字即時查詢派工——`parse_intent` 命中 → 呼叫 `query_wms`/`query_money` 既有函式回查詢結果；unknown 回 None 交還小墨對話。重用既有模組，不新寫查詢邏輯。
+- 線上備料「最後一步」面板（`assets/order.html`）：送出前填**取貨方式（送到案場/自取）＋案場地址＋承辦人＋備註**。
+
+### 變更
+- **啟用定時推播**：`main.py` lifespan 呼叫 `setup_scheduler().start()`（每日 08:00 低庫存，無低於安全庫存則不發；Asia/Taipei），離開時 shutdown。先前 `scheduler.py` 已備但從未啟動。週一收支週報已移除（不再排程）。
+- **啟用即時查詢**：`main.py` 內部同仁分支在 `_handle_staff_admin` 後、`handle_staff` 前插入 `handle_staff_query`。先前 `intent.py`/`query_*` 全寫好但未接線。
+- `liff_api.py` 下單：payload 帶 `site_address`/`delivery_address`/`delivery_method`/`sales_person`；老闆通知含「取貨/案場/承辦」。
+- 下單成功後推**無金額下單回條**給熟客本人（單號＋品項＋案場＋取貨方式，金額另計）。
+
 ## 2026-06-07 — 客戶管理頁（解決客戶量大名單爆訊息）
 
 ### 新增

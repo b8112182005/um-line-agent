@@ -54,6 +54,24 @@
   #loading{ text-align:center; padding:60px 20px; color:#777; }
   .toast{ position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
   .toast.show{ opacity:.95; }
+
+  /* 結帳前：案場 / 取貨資訊 */
+  .sheet{ position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:60; display:none; align-items:flex-end; }
+  .sheet.show{ display:flex; }
+  .sheet .panel{ background:#fff; width:100%; border-radius:16px 16px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto; }
+  .sheet h2{ font-size:16px; color:var(--ink); margin-bottom:4px; }
+  .sheet .hint{ font-size:12px; color:#999; margin-bottom:14px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:13px; color:#555; font-weight:600; margin-bottom:6px; }
+  .field input{ width:100%; padding:11px 12px; border:1px solid #ccd3db; border-radius:9px; font-size:16px; }
+  .seg{ display:flex; gap:10px; }
+  .seg label{ flex:1; border:1px solid #ccd3db; border-radius:9px; padding:11px; text-align:center; font-size:15px; color:#555; font-weight:600; cursor:pointer; }
+  .seg label.on{ background:var(--ink); color:var(--gold); border-color:var(--ink); }
+  .sheet .actions{ display:flex; gap:10px; margin-top:6px; }
+  .sheet .actions button{ flex:1; padding:13px; border:none; border-radius:10px; font-size:16px; font-weight:700; }
+  .sheet .cancel{ background:#eceff3; color:#555; }
+  .sheet .ok{ background:var(--gold); color:var(--ink); }
+  .sheet .ok:disabled{ background:#d8d2c4; color:#8a8472; }
 </style>
 </head>
 <body>
@@ -83,6 +101,37 @@
   <button id="submitBtn" disabled onclick="submitOrder()">送出叫貨</button>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- 結帳前：案場 / 取貨資訊 -->
+<div class="sheet" id="checkout">
+  <div class="panel">
+    <h2>📋 最後一步：案場與取貨</h2>
+    <div class="hint">填好送出後會收到下單回條，專員確認後出貨。</div>
+    <div class="field">
+      <label>取貨方式</label>
+      <div class="seg" id="segDeliver">
+        <label class="on" data-v="送到案場" onclick="pickDeliver(this)">🚚 送到案場</label>
+        <label data-v="自取" onclick="pickDeliver(this)">🏪 自取</label>
+      </div>
+    </div>
+    <div class="field" id="siteField">
+      <label>案場地址 / 工地</label>
+      <input id="ckSite" placeholder="例：宜蘭市○○路123號 工地" />
+    </div>
+    <div class="field">
+      <label>承辦人（可留空）</label>
+      <input id="ckSales" placeholder="現場負責人姓名" />
+    </div>
+    <div class="field">
+      <label>備註（可留空）</label>
+      <input id="ckNote" placeholder="出貨時間、其他需求…" />
+    </div>
+    <div class="actions">
+      <button class="cancel" onclick="closeCheckout()">返回</button>
+      <button class="ok" id="ckOk" onclick="confirmSubmit()">確認送出</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
@@ -225,27 +274,59 @@ function updateCart(){
   document.getElementById('submitBtn').disabled = !ids.length;
 }
 
-async function submitOrder(){
+var deliverMethod = "送到案場";
+
+// 點「送出叫貨」→ 先填案場/取貨資訊
+function submitOrder(){
   var items = Object.keys(cart).map(function(k){ return cart[k]; });
   if(!items.length) return;
+  document.getElementById('checkout').classList.add('show');
+}
+function closeCheckout(){ document.getElementById('checkout').classList.remove('show'); }
+function pickDeliver(el){
+  var segs = el.parentNode.querySelectorAll('label');
+  for(var i=0;i<segs.length;i++) segs[i].classList.remove('on');
+  el.classList.add('on');
+  deliverMethod = el.getAttribute('data-v');
+  // 自取免填案場地址
+  document.getElementById('siteField').style.display = (deliverMethod === '自取') ? 'none' : '';
+}
+
+async function confirmSubmit(){
+  var items = Object.keys(cart).map(function(k){ return cart[k]; });
+  if(!items.length){ closeCheckout(); return; }
+  var site = document.getElementById('ckSite').value.trim();
+  if(deliverMethod === '送到案場' && !site){ toast('請填案場地址'); return; }
+  var sales = document.getElementById('ckSales').value.trim();
+  var note  = document.getElementById('ckNote').value.trim();
+  document.getElementById('ckOk').disabled = true;
   document.getElementById('submitBtn').disabled = true;
   try{
     var r = await fetch('/liff/order', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, H()),
-      body: JSON.stringify({ items: items })
+      body: JSON.stringify({
+        items: items,
+        delivery_method: (deliverMethod === '自取') ? '自取' : '公司代送',
+        site_address: site,
+        sales_person: sales,
+        note: note
+      })
     });
     var d = await r.json();
     if(r.ok){
-      alert('✅ 叫貨單已送出！\n單號：' + d.order_number + '\n專員確認後會與您聯繫。');
+      closeCheckout();
+      alert('✅ 叫貨單已送出！\n單號：' + d.order_number + '\n已傳下單回條到您的聊天室，專員確認後會與您聯繫。');
       cart = {}; render(); updateCart();
       if(liff.isInClient()) liff.closeWindow();
     }else{
       alert('送出失敗：' + (d.detail || '請稍後再試'));
+      document.getElementById('ckOk').disabled = false;
       document.getElementById('submitBtn').disabled = false;
     }
   }catch(e){
     alert('送出失敗：' + (e.message || e));
+    document.getElementById('ckOk').disabled = false;
     document.getElementById('submitBtn').disabled = false;
   }
 }

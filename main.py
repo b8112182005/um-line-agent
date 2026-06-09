@@ -19,6 +19,8 @@ from user_db import (
 from push import leave_group
 from liff_api import router as liff_router
 from customer_admin import router as staff_router, make_token
+from staff_query import handle_staff_query
+from scheduler import setup_scheduler
 
 import httpx
 from fastapi.responses import FileResponse
@@ -67,7 +69,13 @@ CONTACTS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    scheduler = setup_scheduler()
+    scheduler.start()
+    logger.info("定時推播排程已啟動（每日 08:00 低庫存 / 每週一 08:30 收支）")
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="瑀墨助理", lifespan=lifespan)
@@ -552,7 +560,9 @@ async def callback(request: Request):
         if staff_active:
             if await _handle_staff_admin(text, user_id, reply_token):
                 continue
-            response = await handle_staff(text, user_id)
+            # 先試即時查詢（庫存/收支等）；無法判斷才落回小墨同仁對話
+            query_result = await handle_staff_query(text)
+            response = query_result if query_result is not None else await handle_staff(text, user_id)
         else:
             response = await handle_customer(text, user_id)
         await reply_line(reply_token, response)
