@@ -115,12 +115,16 @@
       </div>
     </div>
     <div class="field" id="siteField">
-      <label>案場地址 / 工地</label>
+      <label>案場地址 / 工地 <span style="color:#c0392b">*</span></label>
       <input id="ckSite" placeholder="例：宜蘭市○○路123號 工地" />
     </div>
     <div class="field">
-      <label>承辦人（可留空）</label>
-      <input id="ckSales" placeholder="現場負責人姓名" />
+      <label>現場負責人 <span style="color:#c0392b">*</span></label>
+      <input id="ckSales" placeholder="負責人姓名" />
+    </div>
+    <div class="field">
+      <label>聯絡電話 <span style="color:#c0392b">*</span></label>
+      <input id="ckPhone" type="tel" inputmode="tel" placeholder="例：0912-345-678" />
     </div>
     <div class="field">
       <label>備註（可留空）</label>
@@ -295,9 +299,12 @@ function pickDeliver(el){
 async function confirmSubmit(){
   var items = Object.keys(cart).map(function(k){ return cart[k]; });
   if(!items.length){ closeCheckout(); return; }
-  var site = document.getElementById('ckSite').value.trim();
-  if(deliverMethod === '送到案場' && !site){ toast('請填案場地址'); return; }
+  var site  = document.getElementById('ckSite').value.trim();
   var sales = document.getElementById('ckSales').value.trim();
+  var phone = document.getElementById('ckPhone').value.trim();
+  if(deliverMethod === '送到案場' && !site){ toast('請填案場地址'); return; }
+  if(!sales){ toast('請填現場負責人'); return; }
+  if(!phone){ toast('請填聯絡電話'); return; }
   var note  = document.getElementById('ckNote').value.trim();
   document.getElementById('ckOk').disabled = true;
   document.getElementById('submitBtn').disabled = true;
@@ -310,6 +317,7 @@ async function confirmSubmit(){
         delivery_method: (deliverMethod === '自取') ? '自取' : '公司代送',
         site_address: site,
         sales_person: sales,
+        phone: phone,
         note: note
       })
     });

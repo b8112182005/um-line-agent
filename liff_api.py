@@ -133,7 +133,7 @@ async def submit_order(request: Request):
     payload = {
         "line_user_id": user["user_id"],
         "customer_name": user["name"],
-        "phone": cust.get("phone") or body.get("phone", ""),
+        "phone": body.get("phone", "") or cust.get("phone", ""),
         "note": body.get("note", ""),
         "site_address": site,
         "delivery_address": site,
