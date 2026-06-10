@@ -3,14 +3,34 @@
 流程：熟客在 LINE 開 LIFF 頁 → 前端帶 idToken 呼叫本路由 →
 驗證身份(限 approved 熟客) → 代理 WMS 查品項/建待確認單/查歷史 → 通知老闆。
 """
+import os
 import logging
+from datetime import datetime
+
 import httpx
 from fastapi import APIRouter, Request, HTTPException
 
-from config import LINE_LOGIN_CHANNEL_ID, LIFF_ID, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID
-from user_db import get_role
+from config import LINE_LOGIN_CHANNEL_ID, LIFF_ID, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID, PUBLIC_BASE_URL
+from user_db import get_role, get_wms_customer
 from api_client import wms_get, wms_post
-from push import push_message
+from push import push_message, push_image
+from quote_image import build_quote_image
+
+
+async def _resolve_bound_customer(line_user_id: str) -> dict:
+    """取得熟客綁定的 WMS 客戶完整資料（未綁定/失敗回空 dict）。"""
+    cid = get_wms_customer(line_user_id)
+    if not cid:
+        return {}
+    try:
+        data = await wms_get("/api/customers")
+        rows = data if isinstance(data, list) else data.get("data", [])
+        for c in rows:
+            if str(c.get("id")) == str(cid):
+                return c
+    except Exception as e:
+        logger.warning(f"撈綁定客戶失敗 {cid}：{e}")
+    return {}
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/liff", tags=["LIFF 線上叫貨"])
@@ -108,15 +128,21 @@ async def submit_order(request: Request):
 
     pickup = body.get("delivery_method", "")  # '自取' or '公司代送'
     site = body.get("site_address", "")
+    # 綁定的 WMS 客戶 → 自動帶統編/公司地址/聯絡人/電話到報價單
+    cust = await _resolve_bound_customer(user["user_id"])
     payload = {
         "line_user_id": user["user_id"],
         "customer_name": user["name"],
-        "phone": body.get("phone", ""),
+        "phone": cust.get("phone") or body.get("phone", ""),
         "note": body.get("note", ""),
         "site_address": site,
         "delivery_address": site,
         "delivery_method": pickup,
         "sales_person": body.get("sales_person", ""),
+        "customer_id": cust.get("id"),
+        "contact_person": cust.get("contact", ""),
+        "tax_id": cust.get("tax_id", ""),
+        "company_address": cust.get("company_address", ""),
         "items": clean_items,
     }
     result = await wms_post("/api/orders/pending", json=payload)
@@ -156,20 +182,51 @@ async def submit_order(request: Request):
         except Exception as e:
             logger.error(f"通知 {boss_id[:8]} 失敗：{e}")
 
-    # 下單回條（無金額）推給熟客本人，讓他有憑據
-    receipt = (
-        "✅ 已收到您的叫貨單\n"
-        f"單號：{order_number}\n"
-        f"{extra}\n"
-        "━━━━━━━━━━\n"
-        + "\n".join(lines) + "\n"
-        "━━━━━━━━━━\n"
-        f"共 {len(clean_items)} 項 / {_qty(total_qty)} 件\n"
-        "💰 金額另計，專員確認後會與您聯繫。"
-    )
+    # 報價單照片推給熟客本人（無金額）；產圖或推圖失敗時退回文字回條
+    sent_image = False
     try:
-        await push_message(user["user_id"], receipt)
+        quote_order = {
+            "order_number": order_number,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "customer_name": cust.get("name") or user["name"],
+            "contact_person": payload["contact_person"] or user["name"],
+            "phone": payload["phone"],
+            "tax_id": payload["tax_id"],
+            "company_address": payload["company_address"],
+            "delivery_method": pickup_label,
+            "site_address": site,
+            "sales_person": payload["sales_person"],
+            "items": [
+                {"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", "")}
+                for it in clean_items
+            ],
+        }
+        path = build_quote_image(quote_order)
+        if path:
+            url = f"{PUBLIC_BASE_URL}/assets/quotes/{os.path.basename(path)}"
+            await push_image(user["user_id"], url)
+            await push_message(
+                user["user_id"],
+                f"✅ 已收到叫貨單 {order_number}，報價單如上圖 👆\n💰 金額另計，專員確認後會與您聯繫。",
+            )
+            sent_image = True
     except Exception as e:
-        logger.error(f"回條推播失敗 {user['user_id'][:8]}：{e}")
+        logger.error(f"報價單照片推播失敗 {user['user_id'][:8]}：{e}")
 
-    return {"order_number": order_number, "message": "訂單已送出，回條已傳到您的聊天室"}
+    if not sent_image:
+        receipt = (
+            "✅ 已收到您的叫貨單\n"
+            f"單號：{order_number}\n"
+            f"{extra}\n"
+            "━━━━━━━━━━\n"
+            + "\n".join(lines) + "\n"
+            "━━━━━━━━━━\n"
+            f"共 {len(clean_items)} 項 / {_qty(total_qty)} 件\n"
+            "💰 金額另計，專員確認後會與您聯繫。"
+        )
+        try:
+            await push_message(user["user_id"], receipt)
+        except Exception as e:
+            logger.error(f"回條推播失敗 {user['user_id'][:8]}：{e}")
+
+    return {"order_number": order_number, "message": "訂單已送出，報價單已傳到您的聊天室"}

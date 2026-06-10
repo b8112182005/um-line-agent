@@ -7,3 +7,6 @@ schema_report.json
 venv/
 
 .claude/
+
+# 線上備料報價單動態產生圖（不版控）
+assets/quotes/*.png

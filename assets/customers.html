@@ -33,6 +33,18 @@
   #loading{ text-align:center; padding:50px 20px; color:#777; }
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
   .toast.show{ opacity:.95; }
+  .btn.bind{ background:#fff; color:#2E8B6B; border:1px solid #2E8B6B; }
+  .note.bind{ color:#2E8B6B; }
+  .bindsheet{ position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50; display:none; align-items:flex-end; }
+  .bindsheet.show{ display:flex; }
+  .bindsheet .panel{ background:#fff; width:100%; border-radius:16px 16px 0 0; padding:16px 16px 24px; max-height:85vh; overflow-y:auto; }
+  .bindsheet h2{ font-size:16px; margin-bottom:6px; }
+  .bindsheet .wsearch input{ width:100%; padding:11px 12px; border:1px solid #ccd3db; border-radius:9px; font-size:16px; margin:8px 0 10px; }
+  .wlist .wrow{ border:1px solid #e3e8ee; border-radius:9px; padding:10px 12px; margin-bottom:8px; }
+  .wlist .wrow .wn{ font-weight:600; font-size:14px; }
+  .wlist .wrow .wm{ font-size:12px; color:#888; margin-top:3px; }
+  .wlist .wrow button{ margin-top:8px; background:var(--navy); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; }
+  .bindsheet .close{ width:100%; padding:12px; border:1px solid #ccd3db; background:#fff; border-radius:10px; margin-top:6px; font-size:15px; }
 </style>
 </head>
 <body>
@@ -54,6 +66,18 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- 綁定 WMS 客戶 -->
+<div class="bindsheet" id="bindSheet">
+  <div class="panel">
+    <h2>🔗 綁定 WMS 客戶</h2>
+    <div style="font-size:12px;color:#888" id="bindFor"></div>
+    <div style="font-size:12px;color:#999;margin-top:4px">綁定後，這位熟客線上備料的報價單會自動帶 WMS 客戶的統編／公司地址／電話。</div>
+    <div class="wsearch"><input id="wq" placeholder="🔍 搜尋 WMS 客戶（名稱／統編／電話）" /></div>
+    <div class="wlist" id="wlist"></div>
+    <button class="close" onclick="closeBind()">關閉</button>
+  </div>
+</div>
 
 <script>
 var TOKEN = new URLSearchParams(location.search).get('t') || '';
@@ -99,8 +123,10 @@ function switchTab(s){
   load(true);
 }
 
+var _wt;
 document.addEventListener('input', function(e){
   if(e.target.id === 'q'){ clearTimeout(_t); _t = setTimeout(function(){ search = e.target.value.trim(); load(true); }, 250); }
+  if(e.target.id === 'wq'){ clearTimeout(_wt); _wt = setTimeout(function(){ searchWms(e.target.value.trim()); }, 250); }
 });
 
 function render(){
@@ -110,12 +136,18 @@ function render(){
     var isVip = u.role === 'approved';
     var tag = isVip ? '<span class="tag vip">🌟 熟客</span>' : '<span class="tag reg">👤 非熟客</span>';
     var note = u.note ? '<div class="note">📝 ' + esc(u.note) + '</div>' : '<div class="note nonote">📝 未標註真實身分</div>';
+    var bindLine = isVip
+      ? (u.wms_customer_name
+          ? '<div class="note bind">🔗 已綁定：' + esc(u.wms_customer_name) + '</div>'
+          : '<div class="note nonote">🔗 未綁定 WMS 客戶</div>')
+      : '';
     var roleBtn = isVip
       ? '<button class="btn down" onclick="setRole(\'' + u.user_id + '\',\'demote\',this)">取消熟客</button>'
       : '<button class="btn up" onclick="setRole(\'' + u.user_id + '\',\'approve\',this)">設為熟客</button>';
     var noteBtn = '<button class="btn note" onclick="setNote(\'' + u.user_id + '\')">✏️ 備註</button>';
-    return '<div class="item"><div class="info"><div class="nm">' + esc(u.name) + '</div>' + tag + note +
-      '</div><div class="btns">' + roleBtn + noteBtn + '</div></div>';
+    var bindBtn = isVip ? '<button class="btn bind" onclick="openBind(\'' + u.user_id + '\')">🔗 綁定</button>' : '';
+    return '<div class="item"><div class="info"><div class="nm">' + esc(u.name) + '</div>' + tag + note + bindLine +
+      '</div><div class="btns">' + roleBtn + bindBtn + noteBtn + '</div></div>';
   }).join('');
   document.getElementById('moreBtn').style.display = hasMore ? 'block' : 'none';
 }
@@ -153,6 +185,52 @@ async function setNote(uid){
     if(r.ok){ if(u) u.note = v; toast('備註已更新 📝'); render(); }
     else{ var d = await r.json(); toast(d.detail || '更新失敗'); }
   }catch(e){ toast('更新失敗'); }
+}
+
+// === 綁定 WMS 客戶 ===
+var _bindUid = null;
+function openBind(uid){
+  _bindUid = uid;
+  var u = items.find(function(x){ return x.user_id === uid; });
+  document.getElementById('bindFor').textContent = '熟客：' + ((u&&u.name)||'') + (u&&u.wms_customer_name ? '（目前綁定：'+u.wms_customer_name+'）' : '（尚未綁定）');
+  document.getElementById('wq').value = '';
+  document.getElementById('wlist').innerHTML = '<div style="color:#999;font-size:13px;padding:8px 0">載入中…</div>';
+  document.getElementById('bindSheet').classList.add('show');
+  searchWms('');
+}
+function closeBind(){ document.getElementById('bindSheet').classList.remove('show'); }
+
+async function searchWms(s){
+  try{
+    var r = await api('/staff/wms-customers?search=' + encodeURIComponent(s||''));
+    if(!r.ok){ document.getElementById('wlist').innerHTML = '<div style="color:#c00;padding:8px 0">讀取失敗（檢查 WMS 連線）</div>'; return; }
+    var d = await r.json();
+    var u = items.find(function(x){ return x.user_id === _bindUid; });
+    var cur = u ? String(u.wms_customer_id||'') : '';
+    var html = (u && cur) ? '<div class="wrow"><div class="wn" style="color:#c0863a">解除目前綁定</div><button style="background:#c0863a" onclick="doBind(\'\',\'\')">解除綁定</button></div>' : '';
+    html += (d.items||[]).map(function(c){
+      var meta = [c.tax_id, c.phone, c.contact].filter(Boolean).join('　');
+      var isCur = String(c.id) === cur;
+      var nm = esc(c.name).replace(/'/g,"\\'");
+      return '<div class="wrow"><div class="wn">' + esc(c.name) + (isCur?' ✅目前':'') + '</div>' +
+        (meta?'<div class="wm">' + esc(meta) + '</div>':'') +
+        '<button onclick="doBind(' + c.id + ',\'' + nm + '\')">綁定這筆</button></div>';
+    }).join('') || '<div style="color:#999;padding:8px 0">找不到符合的 WMS 客戶</div>';
+    document.getElementById('wlist').innerHTML = html;
+  }catch(e){ document.getElementById('wlist').innerHTML = '<div style="color:#c00;padding:8px 0">讀取失敗</div>'; }
+}
+
+async function doBind(wmsId, wmsName){
+  try{
+    var r = await api('/staff/customers/bind', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id:_bindUid, wms_customer_id: String(wmsId||'') }) });
+    var d = await r.json();
+    if(r.ok){
+      var u = items.find(function(x){ return x.user_id === _bindUid; });
+      if(u){ u.wms_customer_id = String(wmsId||''); u.wms_customer_name = wmsId ? wmsName : ''; }
+      toast(wmsId ? ('已綁定：' + wmsName) : '已解除綁定');
+      closeBind(); render();
+    }else{ toast(d.detail || '綁定失敗'); }
+  }catch(e){ toast('綁定失敗'); }
 }
 
 if(!TOKEN){ showError('連結無效，請回 LINE 打「客戶名單」取得連結'); }

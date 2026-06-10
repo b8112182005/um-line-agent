@@ -14,7 +14,8 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 
 from config import LINE_CHANNEL_SECRET
-from user_db import get_role, list_customers, count_customers, set_role, set_note
+from user_db import get_role, list_customers, count_customers, set_role, set_note, set_wms_customer
+from api_client import wms_get
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/staff", tags=["客戶管理"])
@@ -64,8 +65,22 @@ async def customers(request: Request, status: str = "approved", search: str = ""
     role = status if status in ("approved", "pending", "blocked") else ""
     search = search.strip()
     rows = list_customers(role=role, search=search, limit=PAGE_SIZE, offset=max(0, offset))
+    # 解析綁定的 WMS 客戶名稱（用 id→name 對照），失敗不影響清單
+    wms_map = {}
+    if any(r.get("wms_customer_id") for r in rows):
+        try:
+            data = await wms_get("/api/customers")
+            for c in (data if isinstance(data, list) else data.get("data", [])):
+                wms_map[str(c.get("id"))] = c.get("name", "")
+        except Exception as e:
+            logger.warning(f"取 WMS 客戶對照失敗：{e}")
     return {
-        "items": [{"user_id": r["user_id"], "name": r["display_name"] or "(未命名)", "role": r["role"], "note": r["note"]} for r in rows],
+        "items": [{
+            "user_id": r["user_id"], "name": r["display_name"] or "(未命名)",
+            "role": r["role"], "note": r["note"],
+            "wms_customer_id": r.get("wms_customer_id", ""),
+            "wms_customer_name": wms_map.get(str(r.get("wms_customer_id")), ""),
+        } for r in rows],
         "offset": offset,
         "page_size": PAGE_SIZE,
         "has_more": len(rows) == PAGE_SIZE,
@@ -108,3 +123,43 @@ async def set_customer_note(request: Request):
         raise HTTPException(status_code=400, detail="參數錯誤")
     set_note(target, note)
     return {"ok": True, "note": note}
+
+
+@router.get("/wms-customers")
+async def search_wms_customers(request: Request, search: str = ""):
+    """搜尋 WMS 客戶（給綁定用）。比對名稱/統編/電話。"""
+    _auth(request)
+    s = search.strip().lower()
+    try:
+        data = await wms_get("/api/customers")
+    except Exception as e:
+        logger.error(f"取 WMS 客戶失敗：{e}")
+        raise HTTPException(status_code=502, detail="無法連到 WMS 客戶資料")
+    rows = data if isinstance(data, list) else data.get("data", [])
+    out = []
+    for c in rows:
+        blob = f"{c.get('name','')} {c.get('tax_id','')} {c.get('phone','')} {c.get('contact','')}".lower()
+        if s and s not in blob:
+            continue
+        out.append({
+            "id": c.get("id"), "name": c.get("name", ""), "tax_id": c.get("tax_id", ""),
+            "phone": c.get("phone", ""), "contact": c.get("contact", ""),
+            "company_address": c.get("company_address", ""),
+        })
+        if len(out) >= 30:
+            break
+    return {"items": out}
+
+
+@router.post("/customers/bind")
+async def bind_wms_customer(request: Request):
+    """綁定 / 解除綁定 熟客 ↔ WMS 客戶。body: {user_id, wms_customer_id}（空字串=解除）。"""
+    _auth(request)
+    body = await request.json()
+    target = body.get("user_id", "")
+    wms_id = str(body.get("wms_customer_id", "") or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="參數錯誤")
+    if not set_wms_customer(target, wms_id):
+        raise HTTPException(status_code=400, detail="綁定失敗（對象不存在）")
+    return {"ok": True, "wms_customer_id": wms_id}

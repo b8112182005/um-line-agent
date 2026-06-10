@@ -28,6 +28,29 @@ async def push_message(to_user_id: str, text: str):
             logger.error(f"推播失敗：{resp.status_code} {resp.text}")
 
 
+async def push_image(to_user_id: str, original_url: str, preview_url: str = ""):
+    """推播圖片訊息（originalContentUrl 須為公開 HTTPS、PNG/JPEG）"""
+    if not to_user_id or not original_url:
+        logger.warning("push_image: 缺 user_id 或圖片 URL，跳過")
+        return
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    body = {
+        "to": to_user_id,
+        "messages": [{
+            "type": "image",
+            "originalContentUrl": original_url,
+            "previewImageUrl": preview_url or original_url,
+        }],
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(LINE_PUSH_URL, json=body, headers=headers)
+        if resp.status_code != 200:
+            logger.error(f"圖片推播失敗：{resp.status_code} {resp.text}")
+
+
 async def push_flex(to_user_id: str, alt_text: str, flex_contents: dict):
     """推播 Flex Message 給指定用戶"""
     if not to_user_id:

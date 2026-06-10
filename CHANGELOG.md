@@ -1,5 +1,17 @@
 # CHANGELOG — um-line-agent
 
+## 2026-06-10 — 報價單照片 + 熟客綁定 WMS 客戶
+
+### 新增
+- `quote_image.py`：用 PIL 畫「瑀墨報價單」圖（黑金品牌、客戶資訊＋品項表，**無金額**），下單後存 `assets/quotes/`。附中文字型 `assets/fonts/NotoSansTC-Regular.ttf`（OFL）。
+- `push.py` `push_image()`：推 LINE 圖片訊息。
+- 熟客↔WMS 客戶綁定：`user_db` 加 `wms_customer_id` + `set_wms_customer`/`get_wms_customer`；`customer_admin` 加 `GET /staff/wms-customers`（搜尋 WMS 客戶）、`POST /staff/customers/bind`；客戶管理頁加「🔗 綁定」UI 與綁定狀態。
+
+### 變更
+- 線上備料下單：解析熟客綁定的 WMS 客戶 → 自動帶**統編／公司地址／聯絡人／電話**到訂單與報價單，並帶 `customer_id` 給 WMS。
+- 下單完成後**推報價單照片**給熟客（取代純文字回條；產圖/推圖失敗時自動退回文字回條）。
+
+
 ## 2026-06-09 — 內部模式接線 + 線上備料案場欄位 + 下單回條
 
 ### 新增

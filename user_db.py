@@ -31,6 +31,11 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN note TEXT DEFAULT ''")
         except sqlite3.OperationalError:
             pass  # 欄位已存在
+        # wms_customer_id：綁定 WMS 客戶（供線上備料自動補統編/地址等到報價單）
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN wms_customer_id TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS groups (
                 group_id TEXT PRIMARY KEY,
@@ -217,11 +222,32 @@ def list_customers(role: str = "", search: str = "", limit: int = 30, offset: in
     where = " AND ".join(conds)
     with _conn() as conn:
         rows = conn.execute(
-            f"SELECT line_user_id, display_name, role, note, created_at FROM users "
+            f"SELECT line_user_id, display_name, role, note, created_at, wms_customer_id FROM users "
             f"WHERE {where} ORDER BY display_name LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
-    return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or "", "created_at": r[4]} for r in rows]
+    return [{"user_id": r[0], "display_name": r[1], "role": r[2], "note": r[3] or "",
+             "created_at": r[4], "wms_customer_id": r[5] or ""} for r in rows]
+
+
+def set_wms_customer(user_id: str, customer_id) -> bool:
+    """綁定 / 解除綁定 WMS 客戶（customer_id 空字串 = 解除）。"""
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE users SET wms_customer_id = ? WHERE line_user_id = ?",
+            (str(customer_id or ""), user_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def get_wms_customer(user_id: str) -> str:
+    """取得綁定的 WMS 客戶 id（未綁定回空字串）。"""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT wms_customer_id FROM users WHERE line_user_id = ?", (user_id,)
+        ).fetchone()
+    return (row[0] or "") if row else ""
 
 
 def count_customers(role: str = "", search: str = "") -> int:
