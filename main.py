@@ -84,16 +84,20 @@ app.include_router(liff_router)
 app.include_router(staff_router)
 
 
+# LINE 內建瀏覽器會積極快取 HTML；這兩頁常改版，一律 no-cache 避免拿到舊頁
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
+
 @app.get("/order", include_in_schema=False)
 async def order_page():
     """LIFF 線上叫貨表單頁"""
-    return FileResponse("assets/order.html")
+    return FileResponse("assets/order.html", headers=_NO_CACHE)
 
 
 @app.get("/customers", include_in_schema=False)
 async def customers_page():
     """客戶管理頁（內部人員，以簽章連結 ?t= 存取）"""
-    return FileResponse("assets/customers.html")
+    return FileResponse("assets/customers.html", headers=_NO_CACHE)
 
 
 # 僅供本機開發在「明確設定」時放行未簽章請求；正式環境一律 fail-closed
