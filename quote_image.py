@@ -88,13 +88,13 @@ def build_quote_image(order: dict):
             ("單號", order.get("order_number", ""), "日期", order.get("date", "")),
             ("客戶", order.get("customer_name", ""), "聯絡人", order.get("contact_person", "")),
             ("電話", order.get("phone", ""), "統編", order.get("tax_id", "")),
-            ("取貨", order.get("delivery_method", ""), "承辦", order.get("sales_person", "")),
         ]
         for lL, vL, lR, vR in pairs:
             kv(colL, y, lL, vL, vw)
             kv(colR, y, lR, vR, vw)
             y += 34
         full_vw = W - pad - 76 - pad
+        kv(colL, y, "取貨", order.get("delivery_method", ""), full_vw); y += 34
         kv(colL, y, "公司", order.get("company_address", ""), full_vw); y += 34
         kv(colL, y, "案場", order.get("site_address", ""), full_vw); y += 34
 

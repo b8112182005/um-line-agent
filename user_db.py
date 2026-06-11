@@ -200,6 +200,15 @@ def set_note(user_id: str, note: str):
         conn.commit()
 
 
+def get_note(user_id: str) -> str:
+    """取用戶備註（真實姓名/公司，未設回空字串）。"""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT note FROM users WHERE line_user_id = ?", (user_id,)
+        ).fetchone()
+    return (row[0] or "") if row else ""
+
+
 def remove_user(user_id: str) -> bool:
     """移除用戶（只能移除 approved/pending/blocked）"""
     with _conn() as conn:

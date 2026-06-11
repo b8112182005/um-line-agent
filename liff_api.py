@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, Request, HTTPException
 
 from config import LINE_LOGIN_CHANNEL_ID, LIFF_ID, LINE_BOSS_USER_ID, LINE_ENGINEER_USER_ID, PUBLIC_BASE_URL
-from user_db import get_role, get_wms_customer
+from user_db import get_role, get_wms_customer, get_note
 from api_client import wms_get, wms_post
 from push import push_message, push_image
 from quote_image import build_quote_image
@@ -230,17 +230,21 @@ async def submit_order(request: Request):
     # 報價單照片推給熟客本人（無金額）；產圖或推圖失敗時退回文字回條
     sent_image = False
     try:
+        # 客戶名：綁定 WMS 客戶用真實名 → 其次用備註(真實姓名/公司) → 最後才暱稱
+        try:
+            note_name = get_note(user["user_id"]) or ""
+        except Exception:
+            note_name = ""
         quote_order = {
             "order_number": order_number,
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "customer_name": cust.get("name") or user["name"],
-            "contact_person": payload["contact_person"] or user["name"],
+            "customer_name": cust.get("name") or note_name or user["name"],
+            "contact_person": sales,   # 聯絡人＝表單填的現場負責人（不再用暱稱、不跟客戶重複）
             "phone": payload["phone"],
             "tax_id": payload["tax_id"],
             "company_address": payload["company_address"],
             "delivery_method": pickup_label,
             "site_address": site,
-            "sales_person": payload["sales_person"],
             "items": [
                 {"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", "")}
                 for it in clean_items
