@@ -14,7 +14,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 
 from config import LINE_CHANNEL_SECRET
-from user_db import get_role, list_customers, count_customers, set_role, set_note, set_wms_customer
+from user_db import get_role, list_customers, count_customers, set_role, set_note, set_wms_customer, remove_user
 from api_client import wms_get
 
 logger = logging.getLogger(__name__)
@@ -149,6 +149,19 @@ async def search_wms_customers(request: Request, search: str = ""):
         if len(out) >= 30:
             break
     return {"items": out}
+
+
+@router.post("/customers/delete")
+async def delete_customer(request: Request):
+    """刪除客戶（僅限非內部人員）。body: {user_id}。"""
+    _auth(request)
+    body = await request.json()
+    target = body.get("user_id", "")
+    if not target:
+        raise HTTPException(status_code=400, detail="參數錯誤")
+    if not remove_user(target):
+        raise HTTPException(status_code=400, detail="無法刪除（對象不存在或為內部人員）")
+    return {"ok": True}
 
 
 @router.post("/customers/bind")

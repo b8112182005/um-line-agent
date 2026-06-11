@@ -34,6 +34,8 @@
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; }
   .toast.show{ opacity:.95; }
   .btn.bind{ background:#fff; color:#2E8B6B; border:1px solid #2E8B6B; }
+  .tiny-del{ background:transparent; border:none; color:#cbd0d6; font-size:11px; padding:4px 2px; align-self:flex-end; cursor:pointer; }
+  .tiny-del:active{ color:#c0392b; }
   .note.bind{ color:#2E8B6B; }
   .bindsheet{ position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50; display:none; align-items:flex-end; }
   .bindsheet.show{ display:flex; }
@@ -146,8 +148,9 @@ function render(){
       : '<button class="btn up" onclick="setRole(\'' + u.user_id + '\',\'approve\',this)">設為熟客</button>';
     var noteBtn = '<button class="btn note" onclick="setNote(\'' + u.user_id + '\')">✏️ 備註</button>';
     var bindBtn = isVip ? '<button class="btn bind" onclick="openBind(\'' + u.user_id + '\')">🔗 綁定</button>' : '';
+    var delBtn = '<button class="tiny-del" onclick="deleteCust(\'' + u.user_id + '\')">刪除</button>';
     return '<div class="item"><div class="info"><div class="nm">' + esc(u.name) + '</div>' + tag + note + bindLine +
-      '</div><div class="btns">' + roleBtn + bindBtn + noteBtn + '</div></div>';
+      '</div><div class="btns">' + roleBtn + bindBtn + noteBtn + delBtn + '</div></div>';
   }).join('');
   document.getElementById('moreBtn').style.display = hasMore ? 'block' : 'none';
 }
@@ -231,6 +234,18 @@ async function doBind(wmsId, wmsName){
       closeBind(); render();
     }else{ toast(d.detail || '綁定失敗'); }
   }catch(e){ toast('綁定失敗'); }
+}
+
+async function deleteCust(uid){
+  var u = items.find(function(x){ return x.user_id === uid; });
+  var nm = (u && u.name) || '此客戶';
+  if(!confirm('確定刪除「' + nm + '」？此動作無法復原。')) return;
+  try{
+    var r = await api('/staff/customers/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: uid }) });
+    var d = await r.json();
+    if(r.ok){ items = items.filter(function(x){ return x.user_id !== uid; }); toast('已刪除'); load(true); }
+    else { toast(d.detail || '刪除失敗'); }
+  }catch(e){ toast('刪除失敗'); }
 }
 
 if(!TOKEN){ showError('連結無效，請回 LINE 打「客戶名單」取得連結'); }
