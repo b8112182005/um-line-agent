@@ -4,6 +4,8 @@
 底部註「金額另計」。畫在足夠高的畫布上，最後裁切到實際內容高度，避免高度估算誤差。
 """
 import os
+import time
+import secrets
 import logging
 from PIL import Image, ImageDraw, ImageFont
 
@@ -52,6 +54,7 @@ def build_quote_image(order: dict):
     回傳存檔絕對路徑，失敗回 None。"""
     try:
         os.makedirs(_OUT_DIR, exist_ok=True)
+        _cleanup_old(7)
         W, pad = 820, 32
         items = order.get("items", []) or []
         row_h, head_h = 38, 40
@@ -135,9 +138,27 @@ def build_quote_image(order: dict):
         y += 24
 
         img = img.crop((0, 0, W, min(H, y + pad)))
-        out_path = os.path.join(_OUT_DIR, f"{order.get('order_number', 'quote')}.png")
+        # 檔名加隨機 token，避免單號可被猜到而外洩他人報價單（含姓名/電話/地址）
+        on = order.get("order_number", "quote")
+        out_path = os.path.join(_OUT_DIR, f"{on}-{secrets.token_hex(8)}.png")
         img.save(out_path, "PNG")
         return out_path
     except Exception as e:
         logger.error(f"產生報價單圖失敗：{e}")
         return None
+
+
+def _cleanup_old(days: int = 7):
+    """刪除 days 天前的舊報價單圖，避免長期堆積。"""
+    try:
+        cutoff = time.time() - days * 86400
+        for f in os.listdir(_OUT_DIR):
+            if f.endswith(".png"):
+                fp = os.path.join(_OUT_DIR, f)
+                try:
+                    if os.path.getmtime(fp) < cutoff:
+                        os.remove(fp)
+                except OSError:
+                    pass
+    except Exception:
+        pass

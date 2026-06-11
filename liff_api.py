@@ -185,7 +185,7 @@ async def submit_order(request: Request):
         "delivery_method": pickup,
         "sales_person": body.get("sales_person", ""),
         "customer_id": cust.get("id"),
-        "contact_person": cust.get("contact", ""),
+        "contact_person": cust.get("contact") or sales,  # 綁定用WMS聯絡人,否則用現場負責人(不用暱稱)
         "tax_id": cust.get("tax_id", ""),
         "company_address": cust.get("company_address", ""),
         "items": clean_items,
