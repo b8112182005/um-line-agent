@@ -4,6 +4,7 @@
 驗證身份(限 approved 熟客) → 代理 WMS 查品項/建待確認單/查歷史 → 通知老闆。
 """
 import os
+import re
 import logging
 from datetime import datetime
 
@@ -15,6 +16,32 @@ from user_db import get_role, get_wms_customer
 from api_client import wms_get, wms_post
 from push import push_message, push_image
 from quote_image import build_quote_image
+
+
+def _valid_phone(s: str) -> bool:
+    """台灣手機(09+8碼) 或 市話(0+9~10碼)；擋全同數字/連號。"""
+    d = re.sub(r"[\s\-()]", "", s or "")
+    if not re.fullmatch(r"0\d{8,9}", d):
+        return False
+    if re.fullmatch(r"(\d)\1+", d):
+        return False
+    if d in "01234567890123" or d in "09876543210":
+        return False
+    return True
+
+
+def _valid_name(s: str) -> bool:
+    """至少 2 字、非純數字、且含中文或英文字母。"""
+    s = (s or "").strip()
+    if len(s) < 2 or s.isdigit():
+        return False
+    return bool(re.search(r"[一-龥A-Za-z]", s))
+
+
+def _valid_addr(s: str) -> bool:
+    """送到案場地址：至少 6 字且含數字（門牌號）。"""
+    s = (s or "").strip()
+    return len(s) >= 6 and bool(re.search(r"\d", s))
 
 
 async def _resolve_bound_customer(line_user_id: str) -> dict:
@@ -128,6 +155,15 @@ async def submit_order(request: Request):
 
     pickup = body.get("delivery_method", "")  # '自取' or '公司代送'
     site = body.get("site_address", "")
+    sales = body.get("sales_person", "")
+    phone = body.get("phone", "")
+    # 必填欄位格式查證（後端強制，前端被繞過也擋）
+    if not _valid_name(sales):
+        raise HTTPException(status_code=400, detail="請填寫正確的現場負責人姓名")
+    if not _valid_phone(phone):
+        raise HTTPException(status_code=400, detail="請填寫正確的聯絡電話（手機 09 開頭 10 碼，或市話含區碼）")
+    if pickup == "公司代送" and not _valid_addr(site):
+        raise HTTPException(status_code=400, detail="請填寫完整案場地址（含門牌號）")
     # 綁定的 WMS 客戶 → 自動帶統編/公司地址/聯絡人/電話到報價單
     cust = await _resolve_bound_customer(user["user_id"])
     payload = {

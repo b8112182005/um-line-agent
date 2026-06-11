@@ -296,15 +296,18 @@ function pickDeliver(el){
   document.getElementById('siteField').style.display = (deliverMethod === '自取') ? 'none' : '';
 }
 
+function vPhone(s){ var d=(s||'').replace(/[\s\-()]/g,''); if(!/^0\d{8,9}$/.test(d)) return false; if(/^(\d)\1+$/.test(d)) return false; if('01234567890123'.indexOf(d)>=0||'09876543210'.indexOf(d)>=0) return false; return true; }
+function vName(s){ s=(s||'').trim(); if(s.length<2||/^\d+$/.test(s)) return false; return /[一-龥a-zA-Z]/.test(s); }
+function vAddr(s){ s=(s||'').trim(); return s.length>=6 && /\d/.test(s); }
 async function confirmSubmit(){
   var items = Object.keys(cart).map(function(k){ return cart[k]; });
   if(!items.length){ closeCheckout(); return; }
   var site  = document.getElementById('ckSite').value.trim();
   var sales = document.getElementById('ckSales').value.trim();
   var phone = document.getElementById('ckPhone').value.trim();
-  if(deliverMethod === '送到案場' && !site){ toast('請填案場地址'); return; }
-  if(!sales){ toast('請填現場負責人'); return; }
-  if(!phone){ toast('請填聯絡電話'); return; }
+  if(deliverMethod === '送到案場' && !vAddr(site)){ toast('請填完整案場地址（含門牌號）'); return; }
+  if(!vName(sales)){ toast('請填正確的現場負責人姓名（至少2字）'); return; }
+  if(!vPhone(phone)){ toast('電話格式不正確（手機 09 開頭 10 碼）'); return; }
   var note  = document.getElementById('ckNote').value.trim();
   document.getElementById('ckOk').disabled = true;
   document.getElementById('submitBtn').disabled = true;
