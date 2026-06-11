@@ -39,9 +39,18 @@ def _valid_name(s: str) -> bool:
 
 
 def _valid_addr(s: str) -> bool:
-    """送到案場地址：至少 6 字且含數字（門牌號）。"""
+    """送到案場地址：要像真地址。至少 6 字、含數字門牌、含道路/地段字，
+    且門牌數字不超過 4 位、無同數字連按（擋 5199999999、9999 之類）。"""
     s = (s or "").strip()
-    return len(s) >= 6 and bool(re.search(r"\d", s))
+    if len(s) < 6 or not re.search(r"\d", s):
+        return False
+    if not re.search(r"[路街巷弄段道里村鄰]", s):   # 要有道路/地段類字，不能只有「號」
+        return False
+    if re.search(r"\d{5,}", s):                      # 門牌/巷段號碼 >4 位 = 不合理
+        return False
+    if re.search(r"(\d)\1{3,}", s):                  # 同一數字連 4 次(9999)= 亂填
+        return False
+    return True
 
 
 async def _resolve_bound_customer(line_user_id: str) -> dict:
@@ -163,7 +172,7 @@ async def submit_order(request: Request):
     if not _valid_phone(phone):
         raise HTTPException(status_code=400, detail="請填寫正確的聯絡電話（手機 09 開頭 10 碼，或市話含區碼）")
     if pickup == "公司代送" and not _valid_addr(site):
-        raise HTTPException(status_code=400, detail="請填寫完整案場地址（含門牌號）")
+        raise HTTPException(status_code=400, detail="請填寫完整正確的案場地址（含路名與門牌號，例：○○路123號）")
     # 綁定的 WMS 客戶 → 自動帶統編/公司地址/聯絡人/電話到報價單
     cust = await _resolve_bound_customer(user["user_id"])
     payload = {
