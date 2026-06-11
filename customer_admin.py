@@ -104,12 +104,20 @@ async def set_customer_role(request: Request):
     if not set_role(target, new_role):
         raise HTTPException(status_code=400, detail="無法變更（對象可能是內部人員或不存在）")
     # 同步切換該客戶的 rich menu（延後匯入避免循環相依）
+    menu_ok = False
     try:
         from main import _switch_menu
-        await _switch_menu("vip" if action == "approve" else "regular", target)
+        menu_ok = await _switch_menu("vip" if action == "approve" else "regular", target)
     except Exception as e:
         logger.warning(f"設身分後切換選單失敗：{e}")
-    return {"ok": True, "role": new_role}
+    # 設熟客時主動通知對方並提示刷新（LINE 對 rich menu 快取很兇，常需重開聊天室才出現）
+    if action == "approve":
+        try:
+            from push import push_message
+            await push_message(target, "🌟 您已開通瑀墨「熟客線上備料」！\n若下方選單還沒出現「線上備料」，請把這個聊天室關掉再打開（或重開 LINE）即可刷新。也可直接打「線上備料」開始下單。")
+        except Exception as e:
+            logger.warning(f"設熟客通知失敗：{e}")
+    return {"ok": True, "role": new_role, "menu_switched": menu_ok}
 
 
 @router.post("/customers/note")
