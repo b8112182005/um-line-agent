@@ -378,7 +378,7 @@ async def _handle_staff_admin(text: str, user_id: str, reply_token: str) -> bool
         name = text[:-3].strip()
         matches = [u for u in find_user_by_name(name) if u["role"] != "approved"] if name else []
         if not matches:
-            await reply_line(reply_token, f"找不到叫「{name}」的非熟客。可先打「客戶名單」確認名字。")
+            await reply_line(reply_token, f"找不到叫「{name}」的非熟客。\n請對方先「加 LINE 好友並傳一則訊息」給我，他就會出現在客戶名單，才能設為熟客。可先打「客戶名單」確認名字。")
         elif len(matches) > 1:
             await reply_line(reply_token, "找到多位：" + "、".join(u["display_name"] for u in matches) + "\n請打更完整的名字。")
         else:
@@ -502,8 +502,13 @@ async def callback(request: Request):
             user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
             or role in ("boss", "engineer")
         )
-        # 客戶傳訊息時，背景把暱稱更新成最新（不阻塞回覆）
         if not is_staff:
+            # 只 follow 才登錄會漏人（follow webhook 不一定收到）；第一次傳訊息就登錄，
+            # 讓對方一定出現在客戶名單、之後才設得了熟客，小墨也判斷得出身分。
+            if role is None:
+                add_pending(user_id, await get_line_profile(user_id))
+                role = "pending"
+            # 客戶傳訊息時，背景把暱稱更新成最新（不阻塞回覆）
             asyncio.create_task(_refresh_name(user_id))
         # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
         sim_mode = _staff_mode.get(user_id) if is_staff else None
