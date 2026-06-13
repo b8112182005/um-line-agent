@@ -201,12 +201,14 @@ function pickCat(el, c){
 }
 
 function buildChips(){
+  var box = document.getElementById('chips');
+  // 只有「油漆」才用品牌細分；工具類選分類後直接出品項
+  if(curCat !== '油漆'){ box.innerHTML = ''; curBrand = ''; return; }
   var seen = {}, brands = [];
   allCatalog.forEach(function(p){
-    if(curCat && (p.category||'').trim() !== curCat) return;
+    if((p.category||'').trim() !== curCat) return;
     var b=(p.brand||'其他').trim()||'其他'; if(!seen[b]){ seen[b]=1; brands.push(b); }
   });
-  var box = document.getElementById('chips');
   var html = '<div class="chip on" data-b="" onclick="pickBrand(this,\'\')">全部品牌</div>';
   html += brands.map(function(b){ return '<div class="chip" data-b="'+esc(b)+'" onclick="pickBrand(this,\''+esc(b).replace(/'/g,"\\'")+'\')">'+esc(b)+'</div>'; }).join('');
   box.innerHTML = html;
