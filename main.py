@@ -34,6 +34,16 @@ LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 # user_id -> "service" | "vip"；不在 dict = 內部同仁模式（預設，重啟後全部回預設）
 _staff_mode: dict[str, str] = {}
 
+# 叫料關鍵詞：熟客打這些字（或含核心詞的短句）→ 直接彈線上叫貨連結。
+# PC 版 LINE 沒有圖文選單，熟客只能打字，故放寬關鍵詞讓小墨主動彈連結。
+_ORDER_TRIGGERS = {
+    "線上備料", "線上叫料", "線上叫貨", "線上下單", "線上訂料", "線上訂貨",
+    "我要備料", "我要叫料", "我要叫貨", "我要訂料", "我要訂貨", "我要下單",
+    "叫料", "叫貨", "訂料", "訂貨", "備料", "下單", "備貨", "補貨",
+    "叫料連結", "備料連結", "備料表單", "叫貨表單", "下單連結",
+    "我要叫料下單", "要叫料", "要備料", "要叫貨", "要訂貨",
+}
+
 # 切換指令（內部人員專用）
 _CMD_TO_SERVICE = ("客服模式", "切換客服", "測試模式", "客服測試", "非熟客模式", "一般客人模式")
 _CMD_TO_VIP = ("熟客模式", "熟客視角", "熟客測試", "VIP模式", "vip模式")
@@ -513,22 +523,33 @@ async def callback(request: Request):
         # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
         sim_mode = _staff_mode.get(user_id) if is_staff else None
 
-        # 熟客選單「線上備料」→ 熟客回 LIFF 下單連結，非熟客提示洽專員
+        # 「線上備料」等叫料關鍵詞 → 熟客直接彈 LIFF 下單連結（PC 版 LINE 沒有圖文選單，靠打字觸發）
         # 內部人員依模擬視角體驗：熟客模式→可下單、客服模式→當非熟客擋下
-        if text == "線上備料":
+        _otxt = (text or "").strip()
+        _is_order = (
+            _otxt in _ORDER_TRIGGERS
+            # 含「線上備料/線上叫貨…」完整片語 → 不限長度（意圖明確）
+            or any(p in _otxt for p in ("線上備料", "線上叫料", "線上叫貨", "線上下單", "線上訂料", "線上訂貨"))
+            # 短訊息含核心詞 → 視為叫料（長句描述需求交給小墨對話收集）
+            or (len(_otxt) <= 8 and any(k in _otxt for k in ("線上備料", "叫料", "叫貨", "訂料", "備料", "下單")))
+        )
+        if _is_order:
             if sim_mode == "vip":
                 is_vip = True
             elif sim_mode == "service":
                 is_vip = False
             else:
                 is_vip = get_role(user_id) in ("approved", "boss", "engineer")
-            if not LIFF_ID:
-                await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
-            elif is_vip:
-                await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
-            else:
+            if is_vip:
+                if not LIFF_ID:
+                    await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
+                else:
+                    await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
+                continue
+            # 非熟客：僅精確「線上備料」(選單按鈕)給專屬提示；其他叫料詞落到小墨對話收集需求
+            if _otxt == "線上備料":
                 await reply_line(reply_token, "🛒 線上備料是熟客專屬服務。\n需要備料請直接告訴小墨品項與數量，我會幫您轉達專員（也可洽詢開通熟客資格）。")
-            continue
+                continue
 
         # 統一選單按鈕：所有用戶皆可使用，不受角色限制
         if text in CONTACTS:
