@@ -238,6 +238,15 @@ async def submit_order(request: Request):
             note_name = get_note(user["user_id"]) or ""
         except Exception:
             note_name = ""
+        # 報價單品項用 WMS 回填後的售價（result.items 含 unit_price/amount）；缺則退回無價品項
+        priced = result.get("items") or []
+        if priced:
+            q_items = [{"name": it.get("product_name", ""), "qty": _qty(it.get("quantity", 0)),
+                        "unit": it.get("unit", ""), "price": it.get("unit_price"), "amount": it.get("amount")}
+                       for it in priced]
+        else:
+            q_items = [{"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", "")}
+                       for it in clean_items]
         quote_order = {
             "order_number": order_number,
             "date": datetime.now().strftime("%Y-%m-%d"),
@@ -248,10 +257,8 @@ async def submit_order(request: Request):
             "company_address": payload["company_address"],
             "delivery_method": pickup_label,
             "site_address": site,
-            "items": [
-                {"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", "")}
-                for it in clean_items
-            ],
+            "total_amount": result.get("total_amount"),
+            "items": q_items,
         }
         path = build_quote_image(quote_order)
         if path:
@@ -259,7 +266,7 @@ async def submit_order(request: Request):
             await push_image(user["user_id"], url)
             await push_message(
                 user["user_id"],
-                f"✅ 已收到叫貨單 {order_number}，報價單如上圖 👆\n💰 金額另計，專員確認後會與您聯繫。",
+                f"✅ 已收到叫貨單 {order_number}，報價單如上圖 👆\n💰 報價含商品金額供參考，實際以專員確認為準（運費另議）。",
             )
             sent_image = True
     except Exception as e:

@@ -1,7 +1,7 @@
-"""產生「瑀墨報價單」圖片（銷貨明細表樣式，無金額），線上備料完成後推給熟客。
+"""產生「瑀墨報價單」圖片（銷貨明細表樣式，含金額），線上備料完成後推給熟客。
 
-設計：白底、黑金品牌；上方標題列，中段雙欄客戶資訊，下方品項表（序/品項/數量/單位），
-底部註「金額另計」。畫在足夠高的畫布上，最後裁切到實際內容高度，避免高度估算誤差。
+設計：白底、黑金品牌；上方標題列，中段雙欄客戶資訊，下方品項表（序/品項/數量/單位/單價/金額），
+底部總計。畫在足夠高的畫布上，最後裁切到實際內容高度，避免高度估算誤差。
 """
 import os
 import time
@@ -47,15 +47,22 @@ def _fit(d, text, font, max_w):
     return text + "…"
 
 
+def _money(v):
+    try:
+        return f"{int(round(float(v))):,}"
+    except Exception:
+        return "—"
+
+
 def build_quote_image(order: dict):
     """order: {order_number, date, customer_name, contact_person, phone, tax_id,
               company_address, delivery_method, site_address, sales_person,
-              items:[{name, qty, unit}]}
+              total_amount, items:[{name, qty, unit, price, amount}]}
     回傳存檔絕對路徑，失敗回 None。"""
     try:
         os.makedirs(_OUT_DIR, exist_ok=True)
         _cleanup_old(7)
-        W, pad = 820, 32
+        W, pad = 900, 32
         items = order.get("items", []) or []
         row_h, head_h = 38, 40
 
@@ -105,36 +112,65 @@ def build_quote_image(order: dict):
         d.line([pad, y, W - pad, y], fill=LINE, width=1)
         y += 14
 
-        # ── 品項表 ──
+        # ── 品項表（序/品項/數量/單位/單價/金額）──
+        def rt(x_right, ky, text, font, fill):
+            t = "" if text is None else str(text)
+            d.text((x_right - d.textlength(t, font=font), ky), t, font=font, fill=fill)
+
         items_top = y
-        x_seq, x_name = pad + 12, pad + 54
-        x_qty, x_unit = W - pad - 150, W - pad - 70
+        x_seq, x_name = pad + 12, pad + 50
+        x_qty_r = W - pad - 290          # 數量(右對齊)
+        x_unit_l = W - pad - 275         # 單位(左)
+        x_price_r = W - pad - 110        # 單價(右對齊)
+        x_amt_r = W - pad - 10           # 金額(右對齊)
         d.rectangle([pad, y, W - pad, y + head_h], fill=INK)
         d.text((x_seq, y + 11), "序", font=_font(15), fill=GOLD)
         d.text((x_name, y + 11), "品項", font=_font(15), fill=GOLD)
-        d.text((x_qty, y + 11), "數量", font=_font(15), fill=GOLD)
-        d.text((x_unit, y + 11), "單位", font=_font(15), fill=GOLD)
+        rt(x_qty_r, y + 11, "數量", _font(15), GOLD)
+        d.text((x_unit_l, y + 11), "單位", font=_font(15), fill=GOLD)
+        rt(x_price_r, y + 11, "單價", _font(15), GOLD)
+        rt(x_amt_r, y + 11, "金額", _font(15), GOLD)
         y += head_h
 
-        name_w = x_qty - x_name - 12
+        name_w = x_qty_r - x_name - 50
+        total = 0.0
         if not items:
             d.text((x_name, y + 9), "（無品項）", font=_font(15), fill=GRAY)
             y += row_h
         for i, it in enumerate(items, 1):
             if i % 2 == 0:
                 d.rectangle([pad, y, W - pad, y + row_h], fill=STRIPE)
+            amt = it.get("amount")
+            if amt is None:
+                try:
+                    amt = float(it.get("qty") or 0) * float(it.get("price") or 0)
+                except Exception:
+                    amt = 0
+            total += float(amt or 0)
             d.text((x_seq, y + 9), str(i), font=_font(15), fill=DARK)
             d.text((x_name, y + 9), _fit(d, it.get("name", ""), _font(15), name_w), font=_font(15), fill=DARK)
-            d.text((x_qty, y + 9), str(it.get("qty", "")), font=_font(15), fill=DARK)
-            d.text((x_unit, y + 9), str(it.get("unit", "")), font=_font(15), fill=DARK)
+            rt(x_qty_r, y + 9, it.get("qty", ""), _font(15), DARK)
+            d.text((x_unit_l, y + 9), str(it.get("unit", "")), font=_font(15), fill=DARK)
+            rt(x_price_r, y + 9, _money(it.get("price")) if it.get("price") not in (None, "", 0) else "—", _font(15), DARK)
+            rt(x_amt_r, y + 9, _money(amt), _font(15), DARK)
             y += row_h
         d.rectangle([pad, items_top, W - pad, y], outline=LINE, width=1)
 
+        # ── 總計列 ──
+        grand = order.get("total_amount")
+        grand = float(grand) if grand not in (None, "") else total
+        th = 42
+        d.rectangle([pad, y, W - pad, y + th], fill=INK)
+        d.text((x_name, y + 12), f"合計　共 {len(items)} 項", font=_font(16), fill=GOLD_SOFT)
+        rt(x_price_r, y + 12, "總計", _font(16), GOLD)
+        rt(x_amt_r, y + 11, "NT$ " + _money(grand), _font(18), GOLD)
+        y += th
+
         # ── 底部 ──
         y += 18
-        d.text((pad, y), "※ 金額另計，專員確認後會與您報價並聯繫。", font=_font(15), fill=NOTE)
-        y += 28
-        d.text((pad, y), f"共 {len(items)} 項　|　瑀墨塗料有限公司", font=_font(13), fill=GRAY)
+        d.text((pad, y), "※ 本報價為商品金額參考，實際以專員確認為準（未含運費／另議）。", font=_font(14), fill=NOTE)
+        y += 26
+        d.text((pad, y), "瑀墨塗料有限公司　|　線上備料報價", font=_font(13), fill=GRAY)
         y += 24
 
         img = img.crop((0, 0, W, min(H, y + pad)))
