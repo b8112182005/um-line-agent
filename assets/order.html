@@ -82,6 +82,7 @@
   </header>
   <div class="toolbar" id="toolbar" style="display:none">
     <div class="search"><input id="q" placeholder="🔍 搜尋品名 / 品牌（例：乳膠漆、虹牌）" /></div>
+    <div class="chips" id="catChips"></div>
     <div class="chips" id="chips"></div>
   </div>
 </div>
@@ -140,7 +141,7 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
 var idToken = "", cart = {}, allCatalog = [], catalog = [], lastItems = [];
-var curBrand = "", curSearch = "";
+var curBrand = "", curSearch = "", curCat = "";
 
 function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },2000); }
 function H(){ return {'X-Line-IdToken': idToken}; }
@@ -173,23 +174,47 @@ async function loadCatalog(){
   if(r.status === 403){ showError('此功能限熟客使用，請洽專員開通'); return false; }
   if(!r.ok){ showError('載入品項失敗，請稍後再試或通知專員'); return false; }
   allCatalog = await r.json();
+  buildCatChips();
   buildChips();
   applyFilter();
   return true;
 }
 
+function buildCatChips(){
+  var seen = {}, cats = [];
+  allCatalog.forEach(function(p){ var c=(p.category||'').trim(); if(c && !seen[c]){ seen[c]=1; cats.push(c); } });
+  cats.sort(function(a,b){ if(a==='油漆') return -1; if(b==='油漆') return 1; return a.localeCompare(b); });
+  var box = document.getElementById('catChips');
+  if(!cats.length){ box.innerHTML=''; return; }
+  var html = '<div class="chip on" data-c="" onclick="pickCat(this,\'\')">全部分類</div>';
+  html += cats.map(function(c){ return '<div class="chip" data-c="'+esc(c)+'" onclick="pickCat(this,\''+esc(c).replace(/'/g,"\\'")+'\')">'+esc(c)+'</div>'; }).join('');
+  box.innerHTML = html;
+}
+
+function pickCat(el, c){
+  curCat = c; curBrand = "";
+  var chips = document.querySelectorAll('#catChips .chip');
+  for(var i=0;i<chips.length;i++) chips[i].classList.remove('on');
+  el.classList.add('on');
+  buildChips();      // 品牌依分類重建
+  applyFilter();
+}
+
 function buildChips(){
   var seen = {}, brands = [];
-  allCatalog.forEach(function(p){ var b=(p.brand||'其他').trim()||'其他'; if(!seen[b]){ seen[b]=1; brands.push(b); } });
+  allCatalog.forEach(function(p){
+    if(curCat && (p.category||'').trim() !== curCat) return;
+    var b=(p.brand||'其他').trim()||'其他'; if(!seen[b]){ seen[b]=1; brands.push(b); }
+  });
   var box = document.getElementById('chips');
-  var html = '<div class="chip on" data-b="" onclick="pickBrand(this,\'\')">全部</div>';
+  var html = '<div class="chip on" data-b="" onclick="pickBrand(this,\'\')">全部品牌</div>';
   html += brands.map(function(b){ return '<div class="chip" data-b="'+esc(b)+'" onclick="pickBrand(this,\''+esc(b).replace(/'/g,"\\'")+'\')">'+esc(b)+'</div>'; }).join('');
   box.innerHTML = html;
 }
 
 function pickBrand(el, b){
   curBrand = b;
-  var chips = document.querySelectorAll('.chip');
+  var chips = document.querySelectorAll('#chips .chip');
   for(var i=0;i<chips.length;i++) chips[i].classList.remove('on');
   el.classList.add('on');
   applyFilter();
@@ -203,6 +228,7 @@ document.addEventListener('input', function(e){
 function applyFilter(){
   var s = curSearch.toLowerCase();
   catalog = allCatalog.filter(function(p){
+    if(curCat && (p.category||'').trim() !== curCat) return false;
     if(curBrand && (p.brand||'其他').trim() !== curBrand) return false;
     if(!s) return true;
     return ((p.brand||'')+' '+(p.name||'')+' '+(p.color_name||'')).toLowerCase().indexOf(s) >= 0;

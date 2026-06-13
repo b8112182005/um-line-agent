@@ -111,7 +111,7 @@ async def catalog(request: Request, search: str = ""):
     data = await wms_get("/api/products", params=params)
     products = data if isinstance(data, list) else data.get("products", data.get("data", []))
     # 只顯示「有定價且有庫存」的品項；缺價或缺貨=尚未開賣/缺貨占位，不給客人看到（避免下到沒貨沒價的單）
-    # 例外：整包單位(箱)庫存掛在基本單位(支)上，本身恆為0，只要有價就顯示
+    # 例外：整包單位(有綁定基本單位者,如盒/箱/封)庫存掛在基本單位上、本身恆為0，只要有價就顯示
     return [{
         "id": p.get("id"),
         "brand": p.get("brand", ""),
@@ -119,7 +119,8 @@ async def catalog(request: Request, search: str = ""):
         "color_name": p.get("color_name", ""),
         "spec": p.get("spec", ""),
         "unit": p.get("unit", "桶"),
-    } for p in products if (p.get("price") or 0) > 0 and ((p.get("stock") or 0) > 0 or p.get("unit") == "箱")]
+        "category": p.get("category", ""),
+    } for p in products if (p.get("price") or 0) > 0 and ((p.get("stock") or 0) > 0 or p.get("base_product_id"))]
 
 
 @router.get("/history")
