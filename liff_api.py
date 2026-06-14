@@ -16,6 +16,7 @@ from user_db import get_role, get_wms_customer, get_note
 from api_client import wms_get, wms_post
 from push import push_message, push_image
 from quote_image import build_quote_image
+from quote_pdf import build_quote_pdf
 
 
 def _valid_phone(s: str) -> bool:
@@ -150,11 +151,16 @@ async def submit_order(request: Request):
     """送出叫貨單 → 建 WMS 待確認訂單 → 通知老闆"""
     user = await _verify(request)
     body = await request.json()
+    raw_items = body.get("items", [])
+    if len(raw_items) > 100:
+        raise HTTPException(status_code=400, detail="品項數過多（上限 100 項），請分批下單")
     clean_items = []
     for it in body.get("items", []):
         qty = float(it.get("quantity", 0) or 0)
         if qty <= 0:
             continue
+        if qty > 9999:
+            raise HTTPException(status_code=400, detail="單一品項數量過大（上限 9999），請確認")
         clean_items.append({
             "product_id": it.get("product_id"),
             "product_name": it.get("product_name", ""),
@@ -238,14 +244,18 @@ async def submit_order(request: Request):
             note_name = get_note(user["user_id"]) or ""
         except Exception:
             note_name = ""
-        # 報價單品項用 WMS 回填後的售價（result.items 含 unit_price/amount）；缺則退回無價品項
+        # 報價單品項用 WMS 回填後的售價（result.items 含 unit_price/amount）；缺則退回無價品項。
+        # 逐項備註從 clean_items 依序帶入（建單保留品項順序）；報價單 PDF 有填才顯示備註欄。
+        notes_seq = [it.get("notes", "") for it in clean_items]
         priced = result.get("items") or []
         if priced:
             q_items = [{"name": it.get("product_name", ""), "qty": _qty(it.get("quantity", 0)),
-                        "unit": it.get("unit", ""), "price": it.get("unit_price"), "amount": it.get("amount")}
-                       for it in priced]
+                        "unit": it.get("unit", ""), "price": it.get("unit_price"), "amount": it.get("amount"),
+                        "note": notes_seq[i] if i < len(notes_seq) else ""}
+                       for i, it in enumerate(priced)]
         else:
-            q_items = [{"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", "")}
+            q_items = [{"name": it["product_name"], "qty": _qty(it["quantity"]), "unit": it.get("unit", ""),
+                        "note": it.get("notes", "")}
                        for it in clean_items]
         quote_order = {
             "order_number": order_number,
@@ -264,9 +274,18 @@ async def submit_order(request: Request):
         if path:
             url = f"{PUBLIC_BASE_URL}/assets/quotes/{os.path.basename(path)}"
             await push_image(user["user_id"], url)
+            # 同步產 PDF（正式可列印版），下載連結併進同一則回條（不另推訊息＝零額外推播則數）
+            pdf_line = ""
+            try:
+                pdf_path = build_quote_pdf(quote_order)
+                if pdf_path:
+                    pdf_url = f"{PUBLIC_BASE_URL}/assets/quotes/{os.path.basename(pdf_path)}"
+                    pdf_line = f"\n📄 報價單 PDF（可列印／存檔）：{pdf_url}"
+            except Exception as e:
+                logger.error(f"產生報價單 PDF 失敗 {user['user_id'][:8]}：{e}")
             await push_message(
                 user["user_id"],
-                f"✅ 已收到叫貨單 {order_number}，報價單如上圖 👆\n💰 報價含商品金額供參考，實際以專員確認為準（運費另議）。",
+                f"✅ 已收到叫貨單 {order_number}，報價單如上圖 👆\n💰 報價含商品金額供參考，實際以專員確認為準（運費另議）。{pdf_line}",
             )
             sent_image = True
     except Exception as e:

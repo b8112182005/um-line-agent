@@ -428,174 +428,178 @@ async def callback(request: Request):
     events = data.get("events", [])
 
     for event in events:
-        # 防重放：丟棄過舊的事件（已通過簽章但可能是重送/重放）
-        if _is_replay(event):
-            logger.warning("丟棄過舊的事件（疑似重放）")
-            continue
+        try:
+            # 防重放：丟棄過舊的事件（已通過簽章但可能是重送/重放）
+            if _is_replay(event):
+                logger.warning("丟棄過舊的事件（疑似重放）")
+                continue
 
-        event_type = event.get("type")
-        source = event.get("source", {})
-        source_type = source.get("type", "")
+            event_type = event.get("type")
+            source = event.get("source", {})
+            source_type = source.get("type", "")
 
-        # === Bot 被加入群組 → 一律自動退出 ===
-        if event_type == "join" and source_type == "group":
-            group_id = source.get("groupId", "")
-            if group_id:
-                logger.info(f"被加入群組，自動退出：{group_id}")
-                await leave_group(group_id)
-            continue
+            # === Bot 被加入群組 → 一律自動退出 ===
+            if event_type == "join" and source_type == "group":
+                group_id = source.get("groupId", "")
+                if group_id:
+                    logger.info(f"被加入群組，自動退出：{group_id}")
+                    await leave_group(group_id)
+                continue
 
-        # === Bot 被踢出群組 ===
-        if event_type == "leave" and source_type == "group":
-            group_id = source.get("groupId", "")
-            logger.info(f"被移出群組：{group_id}")
-            continue
+            # === Bot 被踢出群組 ===
+            if event_type == "leave" and source_type == "group":
+                group_id = source.get("groupId", "")
+                logger.info(f"被移出群組：{group_id}")
+                continue
 
-        # === 新客人加好友 → 自動歸非熟客 + 綁非熟客選單，不通知內部人員 ===
-        if event_type == "follow":
-            uid = source.get("userId", "")
-            if uid:
-                name = await get_line_profile(uid)
-                add_pending(uid, name)
-                await _switch_menu("regular", uid)  # 自我修復：快取失效會自動重抓
-                logger.info(f"新好友：{name or uid[:8]}（已歸非熟客）")
-            continue
+            # === 新客人加好友 → 自動歸非熟客 + 綁非熟客選單，不通知內部人員 ===
+            if event_type == "follow":
+                uid = source.get("userId", "")
+                if uid:
+                    name = await get_line_profile(uid)
+                    add_pending(uid, name)
+                    await _switch_menu("regular", uid)  # 自我修復：快取失效會自動重抓
+                    logger.info(f"新好友：{name or uid[:8]}（已歸非熟客）")
+                continue
 
-        # === 群組訊息一律忽略 ===
-        if source_type == "group":
-            continue
+            # === 群組訊息一律忽略 ===
+            if source_type == "group":
+                continue
 
-        # === 一般訊息（僅限私訊）===
-        if event_type != "message":
-            continue
+            # === 一般訊息（僅限私訊）===
+            if event_type != "message":
+                continue
 
-        msg_type = event["message"].get("type")
-        reply_token = event["replyToken"]
-        user_id = source.get("userId", "unknown")
+            msg_type = event["message"].get("type")
+            reply_token = event["replyToken"]
+            user_id = source.get("userId", "unknown")
 
-        # 圖片 → Claude Vision 分析
-        if msg_type == "image":
-            message_id = event["message"]["id"]
-            response = await handle_image(message_id, user_id)
-            await reply_line(reply_token, response)
-            continue
+            # 圖片 → Claude Vision 分析
+            if msg_type == "image":
+                message_id = event["message"]["id"]
+                response = await handle_image(message_id, user_id)
+                await reply_line(reply_token, response)
+                continue
 
-        # 語音 → Whisper 轉文字後走客服流程
-        if msg_type == "audio":
-            message_id = event["message"]["id"]
-            response = await handle_audio(message_id, user_id)
-            await reply_line(reply_token, response)
-            continue
+            # 語音 → Whisper 轉文字後走客服流程
+            if msg_type == "audio":
+                message_id = event["message"]["id"]
+                response = await handle_audio(message_id, user_id)
+                await reply_line(reply_token, response)
+                continue
 
-        # 影片/檔案 → 引導改打字
-        if msg_type in ("video", "file"):
-            await reply_line(reply_token, "您好，我目前無法處理這類訊息，方便打字說明一下需求嗎？")
-            continue
+            # 影片/檔案 → 引導改打字
+            if msg_type in ("video", "file"):
+                await reply_line(reply_token, "您好，我目前無法處理這類訊息，方便打字說明一下需求嗎？")
+                continue
 
-        # 非文字（貼圖等）→ 忽略
-        if msg_type != "text":
-            continue
+            # 非文字（貼圖等）→ 忽略
+            if msg_type != "text":
+                continue
 
-        text = event["message"]["text"].strip()
+            text = event["message"]["text"].strip()
 
 
-        logger.info(f"收到訊息：「{text}」 來自：{user_id}")
+            logger.info(f"收到訊息：「{text}」 來自：{user_id}")
 
-        # 隱藏指令：查自己的 User ID
-        if text == "查我ID":
-            await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
-            continue
+            # 隱藏指令：查自己的 User ID
+            if text == "查我ID":
+                await reply_line(reply_token, f"你的 LINE User ID：\n{user_id}")
+                continue
 
-        # 角色與內部人員判定（提前，供「線上備料」與模式切換共用）
-        role = get_role(user_id)
-        is_staff = (
-            user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
-            or role in ("boss", "engineer")
-        )
-        if not is_staff:
-            # 只 follow 才登錄會漏人（follow webhook 不一定收到）；第一次傳訊息就登錄，
-            # 讓對方一定出現在客戶名單、之後才設得了熟客，小墨也判斷得出身分。
-            if role is None:
-                add_pending(user_id, await get_line_profile(user_id))
-                role = "pending"
-            # 客戶傳訊息時，背景把暱稱更新成最新（不阻塞回覆）
-            asyncio.create_task(_refresh_name(user_id))
-        # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
-        sim_mode = _staff_mode.get(user_id) if is_staff else None
+            # 角色與內部人員判定（提前，供「線上備料」與模式切換共用）
+            role = get_role(user_id)
+            is_staff = (
+                user_id in (LINE_BOSS_USER_ID, LINE_ENG_BOSS_USER_ID, LINE_ENGINEER_USER_ID)
+                or role in ("boss", "engineer")
+            )
+            if not is_staff:
+                # 只 follow 才登錄會漏人（follow webhook 不一定收到）；第一次傳訊息就登錄，
+                # 讓對方一定出現在客戶名單、之後才設得了熟客，小墨也判斷得出身分。
+                if role is None:
+                    add_pending(user_id, await get_line_profile(user_id))
+                    role = "pending"
+                # 客戶傳訊息時，背景把暱稱更新成最新（不阻塞回覆）
+                asyncio.create_task(_refresh_name(user_id))
+            # 內部人員目前模擬的視角："service"(非熟客) / "vip"(熟客) / None(內部同仁)
+            sim_mode = _staff_mode.get(user_id) if is_staff else None
 
-        # 「線上備料」等叫料關鍵詞 → 熟客直接彈 LIFF 下單連結（PC 版 LINE 沒有圖文選單，靠打字觸發）
-        # 內部人員依模擬視角體驗：熟客模式→可下單、客服模式→當非熟客擋下
-        _otxt = (text or "").strip()
-        _is_order = (
-            _otxt in _ORDER_TRIGGERS
-            # 含「線上備料/線上叫貨…」完整片語 → 不限長度（意圖明確）
-            or any(p in _otxt for p in ("線上備料", "線上叫料", "線上叫貨", "線上下單", "線上訂料", "線上訂貨"))
-            # 短訊息含核心詞 → 視為叫料（長句描述需求交給小墨對話收集）
-            or (len(_otxt) <= 8 and any(k in _otxt for k in ("線上備料", "叫料", "叫貨", "訂料", "備料", "下單")))
-        )
-        if _is_order:
-            if sim_mode == "vip":
-                is_vip = True
-            elif sim_mode == "service":
-                is_vip = False
-            else:
-                is_vip = get_role(user_id) in ("approved", "boss", "engineer")
-            if is_vip:
-                if not LIFF_ID:
-                    await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
+            # 「線上備料」等叫料關鍵詞 → 熟客直接彈 LIFF 下單連結（PC 版 LINE 沒有圖文選單，靠打字觸發）
+            # 內部人員依模擬視角體驗：熟客模式→可下單、客服模式→當非熟客擋下
+            _otxt = (text or "").strip()
+            _is_order = (
+                _otxt in _ORDER_TRIGGERS
+                # 含「線上備料/線上叫貨…」完整片語 → 不限長度（意圖明確）
+                or any(p in _otxt for p in ("線上備料", "線上叫料", "線上叫貨", "線上下單", "線上訂料", "線上訂貨"))
+                # 短訊息含核心詞 → 視為叫料（長句描述需求交給小墨對話收集）
+                or (len(_otxt) <= 8 and any(k in _otxt for k in ("線上備料", "叫料", "叫貨", "訂料", "備料", "下單")))
+            )
+            if _is_order:
+                if sim_mode == "vip":
+                    is_vip = True
+                elif sim_mode == "service":
+                    is_vip = False
                 else:
-                    await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
+                    is_vip = get_role(user_id) in ("approved", "boss", "engineer")
+                if is_vip:
+                    if not LIFF_ID:
+                        await reply_line(reply_token, "🛒 線上叫貨系統設定中，請稍候再試。\n需要備料可直接告訴小墨品項與數量，我會幫您轉達專員。")
+                    else:
+                        await reply_line(reply_token, f"🛒 點此開啟線上叫貨表單 👇\nhttps://liff.line.me/{LIFF_ID}\n\n選好品項與數量送出，專員確認後會與您聯繫。")
+                    continue
+                # 非熟客：僅精確「線上備料」(選單按鈕)給專屬提示；其他叫料詞落到小墨對話收集需求
+                if _otxt == "線上備料":
+                    await reply_line(reply_token, "🛒 線上備料是熟客專屬服務。\n需要備料請直接告訴小墨品項與數量，我會幫您轉達專員（也可洽詢開通熟客資格）。")
+                    continue
+
+            # 統一選單按鈕：所有用戶皆可使用，不受角色限制
+            if text in CONTACTS:
+                await reply_flex(reply_token, _make_contact_flex(CONTACTS[text]))
                 continue
-            # 非熟客：僅精確「線上備料」(選單按鈕)給專屬提示；其他叫料詞落到小墨對話收集需求
-            if _otxt == "線上備料":
-                await reply_line(reply_token, "🛒 線上備料是熟客專屬服務。\n需要備料請直接告訴小墨品項與數量，我會幫您轉達專員（也可洽詢開通熟客資格）。")
+            if text in MENU_RESPONSES and text in ("產品介紹", "常見問題"):
+                await reply_line(reply_token, MENU_RESPONSES[text])
                 continue
 
-        # 統一選單按鈕：所有用戶皆可使用，不受角色限制
-        if text in CONTACTS:
-            await reply_flex(reply_token, _make_contact_flex(CONTACTS[text]))
-            continue
-        if text in MENU_RESPONSES and text in ("產品介紹", "常見問題"):
-            await reply_line(reply_token, MENU_RESPONSES[text])
-            continue
-
-        # 內部人員（boss / engineer）三態模式切換：內部同仁 / 客服(非熟客) / 熟客
-        # 切換時同步換 rich menu，讓內部人員實際看到該視角的選單
-        if is_staff and text in _CMD_TO_SERVICE:
-            _staff_mode[user_id] = "service"
-            ok = await _switch_menu("regular", user_id)
-            menu_note = "選單已換成非熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
-            await reply_line(reply_token, f"🧪 已切換至【客服模式】（一般客人視角）\n{menu_note}；對話走小墨客服，「線上備料」會被當非熟客擋下。\n切換指令：熟客模式 / 內部模式")
-            continue
-        if is_staff and text in _CMD_TO_VIP:
-            _staff_mode[user_id] = "vip"
-            ok = await _switch_menu("vip", user_id)
-            menu_note = "選單已換成熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
-            await reply_line(reply_token, f"🌟 已切換至【熟客模式】（熟客視角）\n{menu_note}，可點「線上備料」實際走一遍下單流程。\n切換指令：客服模式 / 內部模式")
-            continue
-        if is_staff and text in _CMD_TO_STAFF:
-            _staff_mode.pop(user_id, None)
-            ok = await _switch_menu("vip", user_id)  # 內部人員本可線上備料 → 還原熟客版選單
-            menu_note = "選單已還原（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能還原（稍後再試一次）"
-            await reply_line(reply_token, f"✅ 已切換回【內部同仁模式】\n{menu_note}。\n切換指令：客服模式（非熟客）/ 熟客模式")
-            continue
-        if is_staff and text in _CMD_MODE_STATUS:
-            label = {"service": "客服模式（非熟客客人）", "vip": "熟客模式"}.get(sim_mode, "內部同仁模式")
-            await reply_line(reply_token, f"你目前在【{label}】。\n切換指令：內部模式 / 客服模式 / 熟客模式")
-            continue
-
-        # 內部同仁模式才走後台管理與同仁對話；模擬客人視角（service/vip）時走客服
-        staff_active = is_staff and sim_mode is None
-
-        if staff_active:
-            if await _handle_staff_admin(text, user_id, reply_token):
+            # 內部人員（boss / engineer）三態模式切換：內部同仁 / 客服(非熟客) / 熟客
+            # 切換時同步換 rich menu，讓內部人員實際看到該視角的選單
+            if is_staff and text in _CMD_TO_SERVICE:
+                _staff_mode[user_id] = "service"
+                ok = await _switch_menu("regular", user_id)
+                menu_note = "選單已換成非熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
+                await reply_line(reply_token, f"🧪 已切換至【客服模式】（一般客人視角）\n{menu_note}；對話走小墨客服，「線上備料」會被當非熟客擋下。\n切換指令：熟客模式 / 內部模式")
                 continue
-            # 先試即時查詢（庫存/收支等）；無法判斷才落回小墨同仁對話
-            query_result = await handle_staff_query(text)
-            response = query_result if query_result is not None else await handle_staff(text, user_id)
-        else:
-            response = await handle_customer(text, user_id)
-        await reply_line(reply_token, response)
+            if is_staff and text in _CMD_TO_VIP:
+                _staff_mode[user_id] = "vip"
+                ok = await _switch_menu("vip", user_id)
+                menu_note = "選單已換成熟客版（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能切換（稍後再試一次）"
+                await reply_line(reply_token, f"🌟 已切換至【熟客模式】（熟客視角）\n{menu_note}，可點「線上備料」實際走一遍下單流程。\n切換指令：客服模式 / 內部模式")
+                continue
+            if is_staff and text in _CMD_TO_STAFF:
+                _staff_mode.pop(user_id, None)
+                ok = await _switch_menu("vip", user_id)  # 內部人員本可線上備料 → 還原熟客版選單
+                menu_note = "選單已還原（若沒立即更新，關掉聊天室再打開）" if ok else "⚠️ 選單未能還原（稍後再試一次）"
+                await reply_line(reply_token, f"✅ 已切換回【內部同仁模式】\n{menu_note}。\n切換指令：客服模式（非熟客）/ 熟客模式")
+                continue
+            if is_staff and text in _CMD_MODE_STATUS:
+                label = {"service": "客服模式（非熟客客人）", "vip": "熟客模式"}.get(sim_mode, "內部同仁模式")
+                await reply_line(reply_token, f"你目前在【{label}】。\n切換指令：內部模式 / 客服模式 / 熟客模式")
+                continue
+
+            # 內部同仁模式才走後台管理與同仁對話；模擬客人視角（service/vip）時走客服
+            staff_active = is_staff and sim_mode is None
+
+            if staff_active:
+                if await _handle_staff_admin(text, user_id, reply_token):
+                    continue
+                # 先試即時查詢（庫存/收支等）；無法判斷才落回小墨同仁對話
+                query_result = await handle_staff_query(text)
+                response = query_result if query_result is not None else await handle_staff(text, user_id)
+            else:
+                response = await handle_customer(text, user_id)
+            await reply_line(reply_token, response)
+        except Exception:
+            logger.exception("處理單一 event 失敗，跳過此則（callback 仍回 200，避免 LINE 重送）")
+            continue
 
     return {"status": "ok"}
 
