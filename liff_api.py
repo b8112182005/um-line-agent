@@ -16,7 +16,11 @@ from user_db import get_role, get_wms_customer, get_note
 from api_client import wms_get, wms_post
 from push import push_message, push_image
 from quote_image import build_quote_image
-from quote_pdf import build_quote_pdf
+try:
+    from quote_pdf import build_quote_pdf
+except Exception as _e:   # reportlab 等相依缺失時，PDF 報價單停用，但 LINE bot/線上備料/PNG 報價單照常運作
+    build_quote_pdf = None
+    logging.getLogger(__name__).warning(f"quote_pdf 不可用（PDF 報價單停用）：{_e}")
 
 
 def _valid_phone(s: str) -> bool:
@@ -277,7 +281,7 @@ async def submit_order(request: Request):
             # 同步產 PDF（正式可列印版），下載連結併進同一則回條（不另推訊息＝零額外推播則數）
             pdf_line = ""
             try:
-                pdf_path = build_quote_pdf(quote_order)
+                pdf_path = build_quote_pdf(quote_order) if build_quote_pdf else None
                 if pdf_path:
                     pdf_url = f"{PUBLIC_BASE_URL}/assets/quotes/{os.path.basename(pdf_path)}"
                     pdf_line = f"\n📄 報價單 PDF（可列印／存檔）：{pdf_url}"
